@@ -251,7 +251,7 @@ namespace QuantConnect.DataSource
                 if (OS.IsWindows)
                 {
                     // IQConnect is only supported on Windows
-                    var connector = new IQConnect(Config.Get("iqfeed-productName", "IQTimeAndSales"), "6.2.0.25");
+                    var connector = new IQConnect(Config.Get("iqfeed-productName"), "1.0");
                     connector.Launch();
                 }
 
