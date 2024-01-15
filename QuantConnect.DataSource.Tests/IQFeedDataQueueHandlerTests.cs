@@ -14,19 +14,17 @@
  *
 */
 
-using System.Collections.Generic;
 using System;
 using NUnit.Framework;
-using QuantConnect.Data.Market;
 using QuantConnect.Data;
-using QuantConnect.DataSource;
-using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
-using System.Threading.Tasks;
-using QuantConnect.Logging;
-using System.Linq;
 using QuantConnect.Tests;
+using QuantConnect.Logging;
+using System.Threading.Tasks;
+using QuantConnect.Data.Market;
+using System.Collections.Generic;
+using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
-namespace QuantConnect.DataLibrary.Tests
+namespace QuantConnect.DataSource.Tests
 {
     [TestFixture]
     public class IQFeedDataQueueHandlerTests

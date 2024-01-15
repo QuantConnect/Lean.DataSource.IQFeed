@@ -14,4 +14,10 @@
     <PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.16155" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="IQFeed-symbol-map.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

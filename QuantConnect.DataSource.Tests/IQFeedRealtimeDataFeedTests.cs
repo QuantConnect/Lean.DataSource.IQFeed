@@ -13,15 +13,13 @@
  * limitations under the License.
 */
 
-
+using System.Linq;
 using NUnit.Framework;
+using QuantConnect.Util;
 using QuantConnect.Brokerages;
 using QuantConnect.Interfaces;
-using System.Linq;
-using QuantConnect.Util;
-using QuantConnect.DataSource;
 
-namespace QuantConnect.Tests
+namespace QuantConnect.DataSource.Tests
 {
     /// <summary>
     ///  Test fixture is explicit, because tests are dependent on network and are long
