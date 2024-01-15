@@ -16,6 +16,7 @@
 
 using System;
 using NUnit.Framework;
+using System.Threading;
 using QuantConnect.Data;
 using QuantConnect.Tests;
 using QuantConnect.Logging;
@@ -29,6 +30,49 @@ namespace QuantConnect.DataSource.Tests
     [TestFixture]
     public class IQFeedDataQueueHandlerTests
     {
+        [Test]
+        public void IsConnectedReturnsTrue()
+        {
+            var cancellationTokenSource = new CancellationTokenSource();
+            var autoResetEvent = new AutoResetEvent(false);
+            using var iqFeed = new IQFeedDataQueueHandler();
+
+            Assert.IsTrue(iqFeed.IsConnected);
+
+            var dataFromEnumerator = new List<TradeBar>();
+            var dataFromEventHandler = new List<TradeBar>();
+
+            Action<BaseData> callback = (dataPoint) =>
+            {
+                if (dataPoint == null)
+                {
+                    return;
+                }
+
+                dataFromEnumerator.Add((TradeBar)dataPoint);
+            };
+
+            var config = GetSubscriptionDataConfig<TradeBar>(Symbols.SPY, Resolution.Tick);
+
+            ProcessFeed(iqFeed.Subscribe(config, (sender, args) =>
+            {
+                var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                dataFromEventHandler.Add((TradeBar)dataPoint);
+                Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+
+                if(dataFromEventHandler.Count > 10)
+                {
+                    autoResetEvent.Set();
+                }
+
+            }), callback);
+
+            autoResetEvent.WaitOne(TimeSpan.FromSeconds(60), cancellationTokenSource.Token);
+            Assert.Greater(dataFromEnumerator.Count, 0);
+            Assert.Greater(dataFromEventHandler.Count, 0);
+
+        }
+
         [Test]
         public void StartingRun()
         {
