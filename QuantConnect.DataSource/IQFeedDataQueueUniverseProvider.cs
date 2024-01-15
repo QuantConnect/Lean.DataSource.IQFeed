@@ -266,8 +266,7 @@ namespace QuantConnect.DataSource
             var todayCsvFileName = "mktsymbols_v2.txt";
             var todayFullCsvName = Path.Combine(Globals.Cache, todayCsvFileName);
 
-            var iqfeedNameMapFileName = "IQFeed-symbol-map.json";
-            var iqfeedNameMapFullName = Path.Combine("IQFeed", iqfeedNameMapFileName);
+            var iqfeedNameMapFullName = "IQFeed-symbol-map.json";
 
             var mapExists = File.Exists(iqfeedNameMapFullName);
             var universeExists = File.Exists(todayFullZipName);
