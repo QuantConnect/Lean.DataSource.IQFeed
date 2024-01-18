@@ -22,7 +22,6 @@ using QuantConnect.Tests;
 using QuantConnect.Securities;
 using System.Collections.Generic;
 using QuantConnect.Data.Market;
-using static Plotly.NET.StyleParam;
 
 namespace QuantConnect.DataSource.Tests
 {
@@ -44,36 +43,51 @@ namespace QuantConnect.DataSource.Tests
             _historyProvider.Dispose();
         }
 
-        private static IEnumerable<TestCaseData> TestParameters
+        private static IEnumerable<TestCaseData> HistoricalTestParameters
         {
             get
             {
                 var AAPL = Symbols.AAPL;
 
-                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5));
-                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Trade, TimeSpan.FromMinutes(10));
-                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(10));
-                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(180));
-                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(365));
+                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), false);
+                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Trade, TimeSpan.FromMinutes(10), false);
+                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(10), false);
+                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(180), false);
+                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(365), false);
 
-                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.Quote, TimeSpan.FromMinutes(5));
-                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Quote, TimeSpan.FromMinutes(10));
-                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Quote, TimeSpan.FromDays(10));
-                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Quote, TimeSpan.FromDays(180));
-                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Quote, TimeSpan.FromDays(365));
+                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.Quote, TimeSpan.FromMinutes(5), false);
+                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Quote, TimeSpan.FromMinutes(10), false);
+                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Quote, TimeSpan.FromDays(10), false);
+                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Quote, TimeSpan.FromDays(180), false);
+                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Quote, TimeSpan.FromDays(365), false);
 
-                // unsupported tick type
-                // yield return new TestCaseData(AAPL, Resolution.Tick, TickType.OpenInterest, TimeSpan.FromMinutes(5));
+                // TickType.OpenInterest is not maintained
+                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.OpenInterest, TimeSpan.FromMinutes(5), true);
+
+                // Not supported Security Types
+                yield return new TestCaseData(Symbol.Create("SPX.XO", SecurityType.Index, Market.CBOE), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true);
+                yield return new TestCaseData(Symbol.CreateFuture("@ESGH24", Market.CME, new DateTime(2024, 3, 21)), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true); 
+
             }
         }
 
-
-        [Test, TestCaseSource(nameof(TestParameters))]
-        public void GetHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        [TestCaseSource(nameof(HistoricalTestParameters))]
+        public void GetHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, bool isEmptyResult)
         {
             var historyRequests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
 
-            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc).SelectMany(x => x.AllData).ToList();
+            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc);
+
+            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
+        }
+
+        private static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse, bool isEmptyResult)
+        {
+            if (isEmptyResult)
+            {
+                Assert.IsEmpty(historyResponse);
+                return;
+            }
 
             Assert.IsNotEmpty(historyResponse);
 
@@ -97,7 +111,7 @@ namespace QuantConnect.DataSource.Tests
 
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = new DateTime(2024, 01, 17, 16, 30, 0);
+            var end = new DateTime(2024, 01, 18, 12, 0, 0);
 
             if (resolution == Resolution.Daily)
             {
