@@ -809,7 +809,7 @@ namespace QuantConnect.DataSource
                         if (i.DateTimeStamp == DateTime.MinValue) return null;
                         var istartTime = i.DateTimeStamp - requestData.Resolution.ToTimeSpan();
                         if (!isEquity) istartTime = istartTime.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
-                        return new TradeBar(istartTime, requestData.Symbol, (decimal)i.Open, (decimal)i.High, (decimal)i.Low, (decimal)i.Close, i.PeriodVolume);
+                        return new TradeBar(istartTime, requestData.Symbol, (decimal)i.Open, (decimal)i.High, (decimal)i.Low, (decimal)i.Close, i.PeriodVolume, requestData.Resolution.ToTimeSpan());
                     case LookupType.REQ_HST_DWM:
                         var d = (LookupDayWeekMonthEventArgs)e;
                         if (d.DateTimeStamp == DateTime.MinValue) return null;
