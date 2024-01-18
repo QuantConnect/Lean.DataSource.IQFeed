@@ -57,6 +57,11 @@ namespace QuantConnect.DataSource.Tests
             ProcessFeed(iqFeed.Subscribe(config, (sender, args) =>
             {
                 var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                if (dataPoint == null)
+                {
+                    return;
+                }
+
                 dataFromEventHandler.Add((TradeBar)dataPoint);
                 Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
 

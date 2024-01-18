@@ -605,6 +605,11 @@ namespace QuantConnect.DataSource
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
 
         /// <summary>
+        /// Variable indicating whether a message for unsupported tick types has been logged to prevent log spam.
+        /// </summary>
+        private bool _unsupportedTickTypeMessagedLogged;        
+
+        /// <summary>
         /// ...
         /// </summary>
         public HistoryPort(IQFeedDataQueueUniverseProvider symbolUniverse)
@@ -635,6 +640,16 @@ namespace QuantConnect.DataSource
                 (request.Symbol.ID.SecurityType == SecurityType.Option && request.Symbol.IsCanonical()) ||
                 (request.Symbol.ID.SecurityType == SecurityType.Future && request.Symbol.IsCanonical()))
             {
+                yield break;
+            }
+
+            if (request.TickType == TickType.OpenInterest)
+            {
+                if (!_unsupportedTickTypeMessagedLogged)
+                {
+                    Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Unsupported tick type: {request.TickType}");
+                    _unsupportedTickTypeMessagedLogged = true;
+                }
                 yield break;
             }
 
