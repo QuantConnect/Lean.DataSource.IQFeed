@@ -24,10 +24,13 @@ using System.Diagnostics;
 using QuantConnect.Packets;
 using QuantConnect.Logging;
 using QuantConnect.Interfaces;
+using QuantConnect.Indicators;
+using static QLNet.Callability;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
 using Timer = System.Timers.Timer;
+using static QuantConnect.Messages;
 using System.Collections.Concurrent;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
@@ -653,6 +656,12 @@ namespace QuantConnect.DataSource
                 yield break;
             }
 
+            if (request.TickType == TickType.Quote && request.Resolution != Resolution.Tick)
+            {
+                Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {request.Resolution}");
+                yield break;
+            }
+
             // Set this process status
             _inProgress = true;
 
@@ -803,7 +812,33 @@ namespace QuantConnect.DataSource
                     case LookupType.REQ_HST_TCK:
                         var t = (LookupTickEventArgs)e;
                         var time = isEquity ? t.DateTimeStamp : t.DateTimeStamp.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
-                        return new Tick(time, requestData.Symbol, (decimal)t.Last, (decimal)t.Bid, (decimal)t.Ask) { Quantity = t.LastSize };
+                        switch (requestData.TickType)
+                        {
+                            case TickType.Trade:
+                                return new Tick()
+                                {
+                                    Time = time,
+                                    Value = (decimal)t.Last,
+                                    DataType = MarketDataType.Tick,
+                                    Symbol = requestData.Symbol,
+                                    TickType = TickType.Trade,
+                                    Quantity = t.LastSize,
+                                };
+                            case TickType.Quote:
+                                return new Tick()
+                                {
+                                    Time = time,
+                                    DataType = MarketDataType.Tick,
+                                    Symbol = requestData.Symbol,
+                                    TickType = TickType.Quote,
+                                    AskPrice = (decimal)t.Ask,
+                                    //AskSize = askSize,
+                                    BidPrice = (decimal)t.Bid,
+                                    //BidSize = bidSize,
+                                };
+                            default:
+                                throw new NotImplementedException($"The TickType '{requestData.TickType}' is not supported in the {nameof(GetData)} method. Please implement the necessary logic for handling this TickType.");
+                        }
                     case LookupType.REQ_HST_INT:
                         var i = (LookupIntervalEventArgs)e;
                         if (i.DateTimeStamp == DateTime.MinValue) return null;

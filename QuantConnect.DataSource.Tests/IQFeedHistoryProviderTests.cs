@@ -56,10 +56,10 @@ namespace QuantConnect.DataSource.Tests
                 yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(365), false);
 
                 yield return new TestCaseData(AAPL, Resolution.Tick, TickType.Quote, TimeSpan.FromMinutes(5), false);
-                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Quote, TimeSpan.FromMinutes(10), false);
-                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Quote, TimeSpan.FromDays(10), false);
-                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Quote, TimeSpan.FromDays(180), false);
-                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Quote, TimeSpan.FromDays(365), false);
+                yield return new TestCaseData(AAPL, Resolution.Second, TickType.Quote, TimeSpan.FromMinutes(10), true);
+                yield return new TestCaseData(AAPL, Resolution.Minute, TickType.Quote, TimeSpan.FromDays(10), true);
+                yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Quote, TimeSpan.FromDays(180), true);
+                yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Quote, TimeSpan.FromDays(365), true);
 
                 // TickType.OpenInterest is not maintained
                 yield return new TestCaseData(AAPL, Resolution.Tick, TickType.OpenInterest, TimeSpan.FromMinutes(5), true);
@@ -76,19 +76,29 @@ namespace QuantConnect.DataSource.Tests
         {
             var historyRequests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
 
-            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc);
+            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc).ToList();
 
-            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
-        }
-
-        private static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse, bool isEmptyResult)
-        {
             if (isEmptyResult)
             {
                 Assert.IsEmpty(historyResponse);
                 return;
             }
 
+            switch (resolution, tickType)
+            {
+                case (Resolution.Tick, TickType.Quote):
+                    Assert.IsTrue(historyResponse.Any(x => x.Ticks.Any(xx => xx.Value.Count > 0 && xx.Value.Any(t => t.TickType == TickType.Quote))));
+                    break;
+                case (Resolution.Tick, TickType.Trade):
+                    Assert.IsTrue(historyResponse.Any(x => x.Ticks.Any(xx => xx.Value.Count > 0 && xx.Value.Any(t => t.TickType == TickType.Trade))));
+                    break;
+            };
+
+            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
+        }
+
+        private static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse,  bool isEmptyResult)
+        {
             Assert.IsNotEmpty(historyResponse);
 
             if (resolution > Resolution.Tick)
