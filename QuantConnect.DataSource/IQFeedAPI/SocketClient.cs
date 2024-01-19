@@ -58,8 +58,7 @@ namespace QuantConnect.DataSource
 
         public void Send(string command)
         {
-            var szCommand = new byte[command.Length];
-            szCommand = Encoding.ASCII.GetBytes(command);
+            var szCommand = Encoding.ASCII.GetBytes(command);
             var iBytesToSend = szCommand.Length;
             try
             {
