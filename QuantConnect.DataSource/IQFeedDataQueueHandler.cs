@@ -16,22 +16,28 @@
 
 using System;
 using NodaTime;
+using RestSharp;
+using System.IO;
+using System.Net;
+using System.Text;
 using System.Linq;
+using Newtonsoft.Json;
+using QuantConnect.Api;
 using System.Threading;
 using QuantConnect.Util;
 using QuantConnect.Data;
 using System.Diagnostics;
+using Newtonsoft.Json.Linq;
 using QuantConnect.Packets;
 using QuantConnect.Logging;
 using QuantConnect.Interfaces;
-using QuantConnect.Indicators;
-using static QLNet.Callability;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
 using Timer = System.Timers.Timer;
-using static QuantConnect.Messages;
+using System.Security.Cryptography;
 using System.Collections.Concurrent;
+using System.Net.NetworkInformation;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
 namespace QuantConnect.DataSource
@@ -80,6 +86,8 @@ namespace QuantConnect.DataSource
                 Unsubscribe(s);
                 return true;
             };
+
+            ValidateSubscription();
 
             if (!IsConnected) Connect();
         }
@@ -384,6 +392,145 @@ namespace QuantConnect.DataSource
         {
             _symbolUniverse.DisposeSafely();
         }
+
+        private class ModulesReadLicenseRead : Api.RestResponse
+        {
+            [JsonProperty(PropertyName = "license")]
+            public string License;
+
+            [JsonProperty(PropertyName = "organizationId")]
+            public string OrganizationId;
+        }
+
+        /// <summary>
+        /// Validate the user of this project has permission to be using it via our web API.
+        /// </summary>
+        private static void ValidateSubscription()
+        {
+            try
+            {
+                const int productId = 332;
+                var userId = Config.GetInt("job-user-id");
+                var token = Config.Get("api-access-token");
+                var organizationId = Config.Get("job-organization-id", null);
+                // Verify we can authenticate with this user and token
+                var api = new ApiConnection(userId, token);
+                if (!api.Connected)
+                {
+                    throw new ArgumentException("Invalid api user id or token, cannot authenticate subscription.");
+                }
+                // Compile the information we want to send when validating
+                var information = new Dictionary<string, object>()
+                {
+                    {"productId", productId},
+                    {"machineName", Environment.MachineName},
+                    {"userName", Environment.UserName},
+                    {"domainName", Environment.UserDomainName},
+                    {"os", Environment.OSVersion}
+                };
+                // IP and Mac Address Information
+                try
+                {
+                    var interfaceDictionary = new List<Dictionary<string, object>>();
+                    foreach (var nic in NetworkInterface.GetAllNetworkInterfaces().Where(nic => nic.OperationalStatus == OperationalStatus.Up))
+                    {
+                        var interfaceInformation = new Dictionary<string, object>();
+                        // Get UnicastAddresses
+                        var addresses = nic.GetIPProperties().UnicastAddresses
+                            .Select(uniAddress => uniAddress.Address)
+                            .Where(address => !IPAddress.IsLoopback(address)).Select(x => x.ToString());
+                        // If this interface has non-loopback addresses, we will include it
+                        if (!addresses.IsNullOrEmpty())
+                        {
+                            interfaceInformation.Add("unicastAddresses", addresses);
+                            // Get MAC address
+                            interfaceInformation.Add("MAC", nic.GetPhysicalAddress().ToString());
+                            // Add Interface name
+                            interfaceInformation.Add("name", nic.Name);
+                            // Add these to our dictionary
+                            interfaceDictionary.Add(interfaceInformation);
+                        }
+                    }
+                    information.Add("networkInterfaces", interfaceDictionary);
+                }
+                catch (Exception)
+                {
+                    // NOP, not necessary to crash if fails to extract and add this information
+                }
+                // Include our OrganizationId if specified
+                if (!string.IsNullOrEmpty(organizationId))
+                {
+                    information.Add("organizationId", organizationId);
+                }
+                var request = new RestRequest("modules/license/read", Method.POST) { RequestFormat = DataFormat.Json };
+                request.AddParameter("application/json", JsonConvert.SerializeObject(information), ParameterType.RequestBody);
+                api.TryRequest(request, out ModulesReadLicenseRead result);
+                if (!result.Success)
+                {
+                    throw new InvalidOperationException($"Request for subscriptions from web failed, Response Errors : {string.Join(',', result.Errors)}");
+                }
+
+                var encryptedData = result.License;
+                // Decrypt the data we received
+                DateTime? expirationDate = null;
+                long? stamp = null;
+                bool? isValid = null;
+                if (encryptedData != null)
+                {
+                    // Fetch the org id from the response if it was not set, we need it to generate our validation key
+                    if (string.IsNullOrEmpty(organizationId))
+                    {
+                        organizationId = result.OrganizationId;
+                    }
+                    // Create our combination key
+                    var password = $"{token}-{organizationId}";
+                    var key = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+                    // Split the data
+                    var info = encryptedData.Split("::");
+                    var buffer = Convert.FromBase64String(info[0]);
+                    var iv = Convert.FromBase64String(info[1]);
+                    // Decrypt our information
+                    using var aes = new AesManaged();
+                    var decryptor = aes.CreateDecryptor(key, iv);
+                    using var memoryStream = new MemoryStream(buffer);
+                    using var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
+                    using var streamReader = new StreamReader(cryptoStream);
+                    var decryptedData = streamReader.ReadToEnd();
+                    if (!decryptedData.IsNullOrEmpty())
+                    {
+                        var jsonInfo = JsonConvert.DeserializeObject<JObject>(decryptedData);
+                        expirationDate = jsonInfo["expiration"]?.Value<DateTime>();
+                        isValid = jsonInfo["isValid"]?.Value<bool>();
+                        stamp = jsonInfo["stamped"]?.Value<int>();
+                    }
+                }
+                // Validate our conditions
+                if (!expirationDate.HasValue || !isValid.HasValue || !stamp.HasValue)
+                {
+                    throw new InvalidOperationException("Failed to validate subscription.");
+                }
+
+                var nowUtc = DateTime.UtcNow;
+                var timeSpan = nowUtc - QuantConnect.Time.UnixTimeStampToDateTime(stamp.Value);
+                if (timeSpan > TimeSpan.FromHours(12))
+                {
+                    throw new InvalidOperationException("Invalid API response.");
+                }
+                if (!isValid.Value)
+                {
+                    throw new ArgumentException($"Your subscription is not valid, please check your product subscriptions on our website.");
+                }
+                if (expirationDate < nowUtc)
+                {
+                    throw new ArgumentException($"Your subscription expired {expirationDate}, please renew in order to use this product.");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error($"PolygonDataQueueHandler.ValidateSubscription(): Failed during validation, shutting down. Error : {e.Message}");
+                throw;
+            }
+        }
     }
 
     /// <summary>
@@ -481,7 +628,7 @@ namespace QuantConnect.DataSource
                 _prices.TryGetValue(e.Symbol, out referencePrice);
 
                 var symbol = GetLeanSymbol(e.Symbol);
-                var split = new Split(symbol, FeedTime, (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
+                var split = new Data.Market.Split(symbol, FeedTime, (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
                 Emit(split);
             }
         }
