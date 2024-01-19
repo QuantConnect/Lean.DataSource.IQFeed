@@ -15,12 +15,14 @@
 */
 
 using System;
+using System.Linq;
 using NUnit.Framework;
 using System.Threading;
 using QuantConnect.Data;
 using QuantConnect.Tests;
 using QuantConnect.Logging;
 using System.Threading.Tasks;
+using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using System.Collections.Generic;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
@@ -30,17 +32,42 @@ namespace QuantConnect.DataSource.Tests
     [TestFixture]
     public class IQFeedDataQueueHandlerTests
     {
-        [Test]
-        public void IsConnectedReturnsTrue()
+        private IQFeedDataQueueHandler _iqFeed;
+
+        private const int _minimumReturnDataAmount = 5;
+
+        [SetUp]
+        public void SetUp()
         {
-            var cancellationTokenSource = new CancellationTokenSource();
+            _iqFeed = new IQFeedDataQueueHandler();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _iqFeed.Dispose();
+        }
+
+        private static IEnumerable<TestCaseData> SubscribeTestCaseData
+        {
+            get
+            {
+                yield return new TestCaseData(Symbols.AAPL);
+                yield return new TestCaseData(Symbols.SPY);
+
+                // Not supported.
+                // yield return new TestCaseData(Symbol.Create("SPX.XO", SecurityType.Index, Market.CBOE)); // S&P 500 INDEX
+                // yield return new TestCaseData(Symbol.CreateFuture(Futures.Indices.SP500EMini, Market.CME, new DateTime(2024, 3, 21))); // E-MINI S&P 500 ESG INDEX March 2024
+            }
+        }
+
+        [TestCaseSource(nameof(SubscribeTestCaseData))]
+        public void SubscribeOnTickData(Symbol symbol)
+        {
             var autoResetEvent = new AutoResetEvent(false);
-            using var iqFeed = new IQFeedDataQueueHandler();
+            var configs = GetSubscriptionDataConfigs(symbol, Resolution.Tick);
 
-            Assert.IsTrue(iqFeed.IsConnected);
-
-            var dataFromEnumerator = new List<TradeBar>();
-            var dataFromEventHandler = new List<TradeBar>();
+            var tickDataReceived = new Dictionary<TickType, int> { { TickType.Trade, 0 }, { TickType.Quote, 0 } };
 
             Action<BaseData> callback = (dataPoint) =>
             {
@@ -49,68 +76,109 @@ namespace QuantConnect.DataSource.Tests
                     return;
                 }
 
-                dataFromEnumerator.Add((TradeBar)dataPoint);
+                if (dataPoint is Tick tick)
+                {
+                    tickDataReceived[tick.TickType] += 1;
+
+                    if (tickDataReceived.All(type => type.Value >= _minimumReturnDataAmount))
+                    {
+                        autoResetEvent.Set();
+                    }
+                }
             };
 
-            var config = GetSubscriptionDataConfig<TradeBar>(Symbols.SPY, Resolution.Tick);
+            SubscribeOnData(configs, callback, autoResetEvent);
 
-            ProcessFeed(iqFeed.Subscribe(config, (sender, args) =>
+            foreach (var tickData in tickDataReceived)
             {
-                var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                Assert.Greater(tickData.Value, _minimumReturnDataAmount);
+            }
+        }
+
+        [TestCaseSource(nameof(SubscribeTestCaseData))]
+        public void SubscribeOnSecondData(Symbol symbol)
+        {
+            var autoResetEvent = new AutoResetEvent(false);
+            var configs = GetSubscriptionDataConfigs(symbol, Resolution.Second);
+
+            var secondDataReceived = new Dictionary<Type, int> { { typeof(TradeBar), 0 }, { typeof(QuoteBar), 0 } };
+
+            Action<BaseData> callback = (dataPoint) =>
+            {
                 if (dataPoint == null)
                 {
                     return;
                 }
 
-                dataFromEventHandler.Add((TradeBar)dataPoint);
-                Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                switch (dataPoint)
+                {
+                    case TradeBar _:
+                        secondDataReceived[typeof(TradeBar)] += 1;
+                        break;
+                    case QuoteBar _:
+                        secondDataReceived[typeof(QuoteBar)] += 1;
+                        break;
+                }
 
-                if(dataFromEventHandler.Count > 10)
+                if (secondDataReceived.All(type => type.Value >= _minimumReturnDataAmount))
                 {
                     autoResetEvent.Set();
                 }
-
-            }), callback);
-
-            autoResetEvent.WaitOne(TimeSpan.FromSeconds(60), cancellationTokenSource.Token);
-            Assert.Greater(dataFromEnumerator.Count, 0);
-            Assert.Greater(dataFromEventHandler.Count, 0);
-
-        }
-
-        [Test]
-        public void StartingRun()
-        {
-            var iq = new IQFeedDataQueueHandler();
-
-            var unsubscribed = false;
-
-            var dataFromEnumerator = new List<TradeBar>();
-            var dataFromEventHandler = new List<TradeBar>();
-
-            Action<BaseData> callback = (dataPoint) =>
-            {
-                if (dataPoint == null)
-                {
-                    return;
-                }
-
-                dataFromEnumerator.Add((TradeBar)dataPoint);
-
-                if (unsubscribed)
-                {
-                    Assert.Fail("Should not receive data for unsubscribed symbols");
-                }
             };
 
-            var config = GetSubscriptionDataConfig<TradeBar>(Symbols.SPY, Resolution.Minute);
+            SubscribeOnData(configs, callback, autoResetEvent);
 
-            ProcessFeed(iq.Subscribe(config, (sender, args) =>
+            foreach (var tickData in secondDataReceived)
             {
-                var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
-                dataFromEventHandler.Add((TradeBar)dataPoint);
-                Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
-            }), callback);
+                Assert.Greater(tickData.Value, _minimumReturnDataAmount);
+            }
+        }
+
+
+        public void SubscribeOnData(SubscriptionDataConfig[] configs, Action<BaseData> callback, AutoResetEvent autoResetEvent)
+        {
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            foreach (var config in configs)
+            {
+                ProcessFeed(_iqFeed.Subscribe(config, (sender, args) =>
+                {
+                    var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                    Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                }), callback);
+            }
+
+            Assert.IsTrue(autoResetEvent.WaitOne(TimeSpan.FromSeconds(60), cancellationTokenSource.Token));
+
+            foreach (var config in configs)
+            {
+                _iqFeed.Unsubscribe(config);
+            }
+
+            Thread.Sleep(TimeSpan.FromSeconds(1));
+            cancellationTokenSource.Cancel();
+        }
+
+        private SubscriptionDataConfig[] GetSubscriptionDataConfigs(Symbol symbol, Resolution resolution)
+        {
+            SubscriptionDataConfig[] configs;
+            if (resolution == Resolution.Tick)
+            {
+                var tradeConfig = new SubscriptionDataConfig(GetSubscriptionDataConfig<Tick>(symbol, resolution),
+                    tickType: TickType.Trade);
+                var quoteConfig = new SubscriptionDataConfig(GetSubscriptionDataConfig<Tick>(symbol, resolution),
+                    tickType: TickType.Quote);
+                configs = new[] { tradeConfig, quoteConfig };
+            }
+            else
+            {
+                configs = new[]
+                {
+                    GetSubscriptionDataConfig<QuoteBar>(symbol, resolution),
+                    GetSubscriptionDataConfig<TradeBar>(symbol, resolution)
+                };
+            }
+            return configs;
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
