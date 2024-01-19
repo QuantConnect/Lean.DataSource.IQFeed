@@ -22,14 +22,13 @@ using QuantConnect.Data;
 using QuantConnect.Tests;
 using QuantConnect.Logging;
 using System.Threading.Tasks;
-using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using System.Collections.Generic;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
 namespace QuantConnect.DataSource.Tests
 {
-    [TestFixture]
+    [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedDataQueueHandlerTests
     {
         private IQFeedDataQueueHandler _iqFeed;

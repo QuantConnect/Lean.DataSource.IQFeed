@@ -25,7 +25,7 @@ using QuantConnect.Data.Market;
 
 namespace QuantConnect.DataSource.Tests
 {
-    [TestFixture]
+    [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedHistoryProviderTests
     {
         private IQFeedDataQueueHandler _historyProvider;
