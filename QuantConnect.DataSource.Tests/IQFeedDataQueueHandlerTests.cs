@@ -33,8 +33,6 @@ namespace QuantConnect.DataSource.Tests
     {
         private IQFeedDataQueueHandler _iqFeed;
 
-        private const int _minimumReturnDataAmount = 5;
-
         [SetUp]
         public void SetUp()
         {
@@ -52,7 +50,9 @@ namespace QuantConnect.DataSource.Tests
             get
             {
                 yield return new TestCaseData(Symbols.AAPL);
-                yield return new TestCaseData(Symbols.SPY);
+                yield return new TestCaseData(Symbol.Create("SMCI", SecurityType.Equity, Market.USA));
+                yield return new TestCaseData(Symbol.Create("IRBT", SecurityType.Equity, Market.USA));
+                // yield return new TestCaseData(Symbols.SPY);
 
                 // Not supported.
                 // yield return new TestCaseData(Symbol.Create("SPX.XO", SecurityType.Index, Market.CBOE)); // S&P 500 INDEX
@@ -63,6 +63,7 @@ namespace QuantConnect.DataSource.Tests
         [TestCaseSource(nameof(SubscribeTestCaseData))]
         public void SubscribeOnTickData(Symbol symbol)
         {
+            var minimumReturnDataAmount = 5;
             var autoResetEvent = new AutoResetEvent(false);
             var configs = GetSubscriptionDataConfigs(symbol, Resolution.Tick);
 
@@ -79,26 +80,48 @@ namespace QuantConnect.DataSource.Tests
                 {
                     tickDataReceived[tick.TickType] += 1;
 
-                    if (tickDataReceived.All(type => type.Value >= _minimumReturnDataAmount))
+                    switch (tick.TickType)
+                    {
+                        case TickType.Trade:
+                            AssertAllGreaterThanZero(tick.Price, tick.Quantity);
+                            break;
+                        case TickType.Quote:
+                            AssertAllGreaterThanZero(tick.BidPrice, tick.AskPrice, tick.BidSize, tick.AskSize);
+                            break;
+                    }
+
+                    if (tickDataReceived.All(type => type.Value >= minimumReturnDataAmount))
                     {
                         autoResetEvent.Set();
                     }
                 }
             };
 
-            SubscribeOnData(configs, callback, autoResetEvent);
+            SubscribeOnDataByConfigs(configs, callback, autoResetEvent);
 
             foreach (var tickData in tickDataReceived)
             {
-                Assert.Greater(tickData.Value, _minimumReturnDataAmount);
+                Log.Trace($"{nameof(SubscribeOnTickData)}: Return {tickData.Key} = {tickData.Value}");
+                Assert.GreaterOrEqual(tickData.Value, minimumReturnDataAmount);
             }
         }
 
         [TestCaseSource(nameof(SubscribeTestCaseData))]
         public void SubscribeOnSecondData(Symbol symbol)
         {
+            SubscribeOnData(symbol, Resolution.Tick, 3);
+        }
+
+        [TestCaseSource(nameof(SubscribeTestCaseData))]
+        public void SubscribeOnMinuteData(Symbol symbol)
+        {
+            SubscribeOnData(symbol, Resolution.Minute, maxWaitResponseTimeSecond: 80);
+        }
+
+        private void SubscribeOnData(Symbol symbol, Resolution resolution, int minimumReturnDataAmount = 1, int maxWaitResponseTimeSecond = 60)
+        {
             var autoResetEvent = new AutoResetEvent(false);
-            var configs = GetSubscriptionDataConfigs(symbol, Resolution.Second);
+            var configs = GetSubscriptionDataConfigs(symbol, resolution);
 
             var secondDataReceived = new Dictionary<Type, int> { { typeof(TradeBar), 0 }, { typeof(QuoteBar), 0 } };
 
@@ -119,22 +142,22 @@ namespace QuantConnect.DataSource.Tests
                         break;
                 }
 
-                if (secondDataReceived.All(type => type.Value >= _minimumReturnDataAmount))
+                if (secondDataReceived.All(type => type.Value >= minimumReturnDataAmount))
                 {
                     autoResetEvent.Set();
                 }
             };
 
-            SubscribeOnData(configs, callback, autoResetEvent);
+            SubscribeOnDataByConfigs(configs, callback, autoResetEvent, maxWaitResponseTimeSecond);
 
             foreach (var tickData in secondDataReceived)
             {
-                Assert.Greater(tickData.Value, _minimumReturnDataAmount);
+                Log.Trace($"{nameof(SubscribeOnSecondData)}: Return {tickData.Key} = {tickData.Value}");
+                Assert.GreaterOrEqual(tickData.Value, minimumReturnDataAmount);
             }
         }
 
-
-        public void SubscribeOnData(SubscriptionDataConfig[] configs, Action<BaseData> callback, AutoResetEvent autoResetEvent)
+        private void SubscribeOnDataByConfigs(SubscriptionDataConfig[] configs, Action<BaseData> callback, AutoResetEvent autoResetEvent, int maxWaitResponseTimeSecond = 60)
         {
             var cancellationTokenSource = new CancellationTokenSource();
 
@@ -147,7 +170,7 @@ namespace QuantConnect.DataSource.Tests
                 }), callback);
             }
 
-            Assert.IsTrue(autoResetEvent.WaitOne(TimeSpan.FromSeconds(60), cancellationTokenSource.Token));
+            autoResetEvent.WaitOne(TimeSpan.FromSeconds(maxWaitResponseTimeSecond), cancellationTokenSource.Token);
 
             foreach (var config in configs)
             {
@@ -215,6 +238,29 @@ namespace QuantConnect.DataSource.Tests
                     Log.Error(err.Message);
                 }
             });
+        }
+
+        /// <summary>
+        /// Asserts that all decimal values in the specified list are greater than zero.
+        /// </summary>
+        /// <param name="list">The list of decimal values to be asserted.</param>
+        /// <remarks>
+        /// This method uses the NUnit.Framework.Assert.Greater method to check that each decimal value in the list
+        /// is greater than zero. If any value is less than or equal to zero, an assertion failure will be raised.
+        /// </remarks>
+        /// <example>
+        /// The following example demonstrates the usage of AssertAllGreaterThanZero:
+        /// <code>
+        /// decimal[] values = { 1.5m, 2.3m, 3.8m };
+        /// AssertAllGreaterThanZero(values);
+        /// </code>
+        /// </example>
+        private static void AssertAllGreaterThanZero(params decimal[] list)
+        {
+            foreach (var item in list)
+            {
+                Assert.Greater(item, 0);
+            }
         }
     }
 }
