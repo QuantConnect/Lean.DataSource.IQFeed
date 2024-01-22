@@ -55,4 +55,4 @@ jobs:
         run: dotnet build ./QuantConnect.IQFeed.Tests/QuantConnect.IQFeed.Tests.csproj /p:Configuration=Release /v:quiet /p:WarningLevel=1
 
       - name: Run Tests
-        run: dotnet test ./QuantConnect.IQFeed.Tests/bin/Release/net6.0/QuantConnect.IQFeed.Tests.dll
+        run: dotnet test ./QuantConnect.IQFeed.Tests/bin/Release/QuantConnect.IQFeed.Tests.dll
