@@ -17,24 +17,37 @@
 using QuantConnect.Data;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
+using IQFeed.CSharpApiClient.Lookup;
+using QuantConnect.Configuration;
 
 namespace QuantConnect.IQFeed.Downloader
 {
     /// <summary>
-    /// IQFeed Data Downloader class 
+    /// Represents a data downloader for retrieving historical market data using IQFeed.
     /// </summary>
     public class IQFeedDataDownloader : IDataDownloader
     {
-        private readonly IQFeedFileHistoryProvider _fileHistoryProvider;
-        private readonly TickType _tickType;
+        /// <summary>
+        /// The number of IQFeed clients to use for parallel processing.
+        /// </summary>
+        private const int NumberOfClients = 8;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class
+        /// The file history provider used by the data downloader.
         /// </summary>
-        /// <param name="fileHistoryProvider"></param>
-        public IQFeedDataDownloader(IQFeedFileHistoryProvider fileHistoryProvider)
+        private readonly IQFeedFileHistoryProvider _fileHistoryProvider;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class.
+        /// </summary>
+        public IQFeedDataDownloader()
         {
-            _fileHistoryProvider = fileHistoryProvider;
+            // Create and connect the IQFeed lookup client
+            var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), 9100, NumberOfClients);
+            // Establish connection with IQFeed Client
+            lookupClient.Connect();
+
+            _fileHistoryProvider = new IQFeedFileHistoryProvider(lookupClient, new IQFeedDataQueueUniverseProvider(), MarketHoursDatabase.FromDataFolder());
         }
 
         /// <summary>
