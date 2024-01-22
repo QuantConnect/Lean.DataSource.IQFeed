@@ -3,8 +3,7 @@
 		<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
 		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
 		<TargetFramework>net6.0</TargetFramework>
-		<Product>QuantConnect.IQFeed</Product>
-		<AssemblyName>process</AssemblyName>
+		<Product>QuantConnect.IQFeed.Downloader</Product>
 		<AssemblyName>QuantConnect.IQFeed.Downloader</AssemblyName>
 		<RootNamespace>QuantConnect.IQFeed.Downloader</RootNamespace>
 		<AssemblyTitle>QuantConnect.IQFeed.Downloader</AssemblyTitle>
@@ -16,6 +15,17 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
+	
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+		<DebugType>full</DebugType>
+		<OutputPath>bin\Debug\</OutputPath>
+	</PropertyGroup>
+
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+		<DebugType>pdbonly</DebugType>
+		<OutputPath>bin\Release\</OutputPath>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.*" />
 	</ItemGroup>
