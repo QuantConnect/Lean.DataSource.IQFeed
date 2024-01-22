@@ -13,11 +13,10 @@
  * limitations under the License.
 */
 
-using System;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
 
-namespace QuantConnect.DataProcessing
+namespace QuantConnect.IQFeed.Downloader
 {
     /// <summary>
     /// Entry point for the data downloader/converter

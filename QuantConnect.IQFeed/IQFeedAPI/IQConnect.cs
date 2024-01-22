@@ -15,10 +15,9 @@
 */
 
 using System.Diagnostics;
-using System.Threading;
 using QuantConnect.Configuration;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
 
     public class IQConnect

@@ -14,16 +14,12 @@
  *
 */
 
-using System;
 using NodaTime;
 using RestSharp;
-using System.IO;
 using System.Net;
 using System.Text;
-using System.Linq;
 using Newtonsoft.Json;
 using QuantConnect.Api;
-using System.Threading;
 using QuantConnect.Util;
 using QuantConnect.Data;
 using System.Diagnostics;
@@ -33,14 +29,13 @@ using QuantConnect.Logging;
 using QuantConnect.Interfaces;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
-using System.Collections.Generic;
 using Timer = System.Timers.Timer;
 using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     /// <summary>
     /// IQFeedDataQueueHandler is an implementation of IDataQueueHandler and IHistoryProvider

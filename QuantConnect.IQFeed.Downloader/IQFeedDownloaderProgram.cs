@@ -13,21 +13,16 @@
  * limitations under the License.
 */
 
-using System;
-using System.Linq;
 using QuantConnect.Data;
 using QuantConnect.Util;
 using System.Diagnostics;
 using QuantConnect.Logging;
-using System.Threading.Tasks;
 using IQFeed.CSharpApiClient;
 using QuantConnect.Securities;
-using QuantConnect.DataSource;
-using System.Collections.Generic;
 using QuantConnect.Configuration;
 using IQFeed.CSharpApiClient.Lookup;
 
-namespace QuantConnect.DataProcessing
+namespace QuantConnect.IQFeed.Downloader
 {
     /// <summary>
     /// IQFeed Downloader Toolbox Project For LEAN Algorithmic Trading Engine.
