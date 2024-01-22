@@ -1,79 +1,21 @@
-![LEAN Data Source SDK](http://cdn.quantconnect.com.s3.us-east-1.amazonaws.com/datasources/Github_LeanDataSourceSDK.png)
-
-# Lean DataSource SDK
+# Lean IQFeed Data Source Plugin
 
 [![Build Status](https://github.com/QuantConnect/LeanDataSdk/workflows/Build%20%26%20Test/badge.svg)](https://github.com/QuantConnect/LeanDataSdk/actions?query=workflow%3A%22Build%20%26%20Test%22)
 
 ### Introduction
+This repository contains a Lean data source plugin for IQFeed, allowing users to seamlessly integrate IQFeed data with  QuantConnect LEAN Algorithmic Trading Engine.
 
-The Lean Data SDK is a cross-platform template repository for developing custom data types for Lean.
-These data types will be consumed by [QuantConnect](https://www.quantconnect.com/) trading algorithms and research environment, locally or in the cloud.
-
-It is composed by example .Net solution for the data type and converter scripts.
-
-### Prerequisites
-
-The solution targets dotnet 5, for installation instructions please follow [dotnet download](https://dotnet.microsoft.com/download).
-
-The data downloader and converter script can be developed in different ways: C# executable, Python script, Python Jupyter notebook or even a bash script.
-- The python script should be compatible with python 3.6.8
-- Bash script will run on Ubuntu Bionic
-
-Specifically, the enviroment where these scripts will be run is [quantconnect/research](https://hub.docker.com/repository/docker/quantconnect/research) based on [quantconnect/lean:foundation](https://hub.docker.com/repository/docker/quantconnect/lean).
-
-### Installation
-
-The "Use this template" feature should be used for each unique data source which requires its own data processing. Once it is cloned locally, you should be able to successfully build the solution, run all tests and execute the downloader and/or conveter scripts. The final version should pass all CI tests of GitHub Actions.
-
-Once ready, please contact support@quantconnect.com and we will create a listing in the QuantConnect Data Market for your company and link to your public repository and commit hash. 
-
-### Datasets Vendor Requirements
-
-Key requirements for new vendors include:
-
- - A well-defined dataset with a clear and static vision for the data to minimize churn or changes as people will be building systems from it. This is easiest with "raw" data (e.g. sunshine hours vs a sentiment algorithm)
- - Robust ticker and security links to ensure the tickers are tracked well through time, or accurately point in time. ISIN, FIGI, or point in time ticker supported
- - Robust funding to ensure viable for at least 1 year
- - Robust API to ensure reliable up-time. No dead links on site or and 502 servers while using API
- - Consistent delivery schedule, on time and in time for market trading
- - Consistent data format with notifications and lead time on data format updates
- - At least 1 year of historical point in time data
- - Survivorship bias free data
- - Good documentation for the dataset
-
+### About IQFeed
+The Lean IQFeed Data Source Plugin offers unparalleled market data precision by leveraging IQFeed's true tick-by-tick data feed. Unlike other providers that may miss over 50% of actual trades, IQFeed delivers unfiltered, real-time data for every trade from exchanges directly. Its reliability is attributed to owning and managing its datacenter, eliminating dependence on third parties, and ensuring fully redundant systems to proactively handle outages. IQFeed stands out by providing more comprehensive and faster data, thanks to its advanced Quad Redundant ticker plant designed to handle today's high-volume markets.
 
 ### Tutorials
 
- - See [Tutorials](https://www.quantconnect.com/docs/v2/our-platform/datasets/contributing-datasets) for a step by step guide for creating a new LEAN Data Source.
-# Setup IQFeed 
+#### Setup IQFeed
+1. To use this plugin, you first need to sign up for an IQFeed account. 
+Visit [IQFeed](https://www.iqfeed.net/Trent/index.cfm?web=iqfeed&displayaction=start) to create an account.
 
-## 1. Sign up for [IQFeed](https://www.iqfeed.net/trent/index.cfm?displayaction=start&promo=1996499)  
+2. Install IQFeed Client
+Download and install the IQFeed client from [IQFeed Download](http://www.iqfeed.net/index.cfm?displayaction=support&section=download).
 
-## 2. Install [IQFeed Client](http://www.iqfeed.net/index.cfm?displayaction=support&section=download)
-
-## 3. Configuration
-
-### 3.1. Docker for Windows
-
-#### Edit Launcher/config.json
-
-1. Set `"environment"` to `"live-interactive-iqfeed"`
-2. Set `"iqfeed-host"` to `"host.docker.internal"`
-
-#### Edit run_docker_iqfeed.bat
-
-1. Set `"iqfeed_product_name"`
-2. Set `"iqfeed_version"`
-3. Set `"iqfeed_login"` (optional)
-4. Set `"iqfeed_password"` (optional)
-
-#### Start IQConnect and Lean docker image
-Simply by running `run_docker_iqfeed.bat` this will automatically start IQConnect with your provided settings and start the Lean docker image.
-
-### 3.2. Standard on Windows
-
-#### Edit Launcher/config.json
-1. Set `"environment"` to `"live-interactive-iqfeed"`
-2. Set `"iqfeed-username"`
-3. Set `"iqfeed-password"`
-4. Set `"iqfeed-productName"`
+3. Configure
+To configure the IQFeed plugin.
