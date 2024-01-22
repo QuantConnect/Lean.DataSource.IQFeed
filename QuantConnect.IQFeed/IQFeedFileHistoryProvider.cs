@@ -13,21 +13,17 @@
  * limitations under the License.
 */
 
-using System;
-using System.IO;
-using System.Linq;
 using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Brokerages;
 using QuantConnect.Data.Market;
-using System.Collections.Generic;
 using IQFeed.CSharpApiClient.Lookup;
 using System.Collections.Concurrent;
 using IQFeed.CSharpApiClient.Lookup.Historical.Enums;
 using IQFeed.CSharpApiClient.Lookup.Historical.Messages;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     /// <summary>
     /// IQFeed history provider downloading data directly to disk to reduce memory impact when processing large tick request.

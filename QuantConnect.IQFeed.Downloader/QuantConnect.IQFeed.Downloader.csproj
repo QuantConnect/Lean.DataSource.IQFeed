@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+		<TargetFramework>net6.0</TargetFramework>
+		<Product>QuantConnect.IQFeed</Product>
+		<AssemblyName>process</AssemblyName>
+		<AssemblyName>QuantConnect.IQFeed.Downloader</AssemblyName>
+		<RootNamespace>QuantConnect.IQFeed.Downloader</RootNamespace>
+		<AssemblyTitle>QuantConnect.IQFeed.Downloader</AssemblyTitle>
+		<OutputType>Exe</OutputType>
+		<OutputPath>bin\$(Configuration)</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.*" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\QuantConnect.IQFeed\QuantConnect.IQFeed.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Remove="config.json" />
+		<Content Include="config.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+</Project>

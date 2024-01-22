@@ -14,23 +14,18 @@
  *
 */
 
-using System;
-using System.IO;
-using System.Linq;
 using System.Net;
 using Newtonsoft.Json;
-using System.Threading;
 using QuantConnect.Util;
 using QuantConnect.Logging;
 using System.Globalization;
 using QuantConnect.Interfaces;
 using QuantConnect.Brokerages;
 using QuantConnect.Securities;
-using System.Collections.Generic;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Transport;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     /// <summary>
     /// Class implements several interfaces to support IQFeed symbol mapping to LEAN and symbol lookup

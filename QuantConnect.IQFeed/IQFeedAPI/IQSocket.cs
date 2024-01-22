@@ -14,13 +14,12 @@
  *
 */
 
-using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Globalization;
 using QuantConnect.Configuration;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     public enum LookupSequence
     {

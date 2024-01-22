@@ -14,9 +14,7 @@
  *
 */
 
-using System;
-
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     public class Time
     {

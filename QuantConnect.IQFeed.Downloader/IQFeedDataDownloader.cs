@@ -14,15 +14,11 @@
  *
 */
 
-using System;
-using System.Linq;
 using QuantConnect.Data;
-using QuantConnect.DataSource;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
-using System.Collections.Generic;
 
-namespace QuantConnect.DataProcessing
+namespace QuantConnect.IQFeed.Downloader
 {
     /// <summary>
     /// IQFeed Data Downloader class 

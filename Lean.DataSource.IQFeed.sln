@@ -3,13 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.002.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.DataSource", "QuantConnect.DataSource\QuantConnect.DataSource.csproj", "{209C11BB-C283-4599-A04D-D96097E006E6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.IQFeed", "QuantConnect.IQFeed\QuantConnect.IQFeed.csproj", "{209C11BB-C283-4599-A04D-D96097E006E6}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.DataProcessing", "QuantConnect.DataProcessing\QuantConnect.DataProcessing.csproj", "{90A539F4-1E21-475F-B591-6C08830E12B3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.IQFeed.Downloader", "QuantConnect.IQFeed.Downloader\QuantConnect.IQFeed.Downloader.csproj", "{90A539F4-1E21-475F-B591-6C08830E12B3}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.Tests", "..\Lean\Tests\QuantConnect.Tests.csproj", "{AF992149-87F2-4B40-B864-E9FC8F8392A6}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.DataSource.Tests", "QuantConnect.DataSource.Tests\QuantConnect.DataSource.Tests.csproj", "{E48A0E2D-97D7-4480-AE0D-EB73838D9208}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.IQFeed.Tests", "QuantConnect.IQFeed.Tests\QuantConnect.IQFeed.Tests.csproj", "{E48A0E2D-97D7-4480-AE0D-EB73838D9208}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

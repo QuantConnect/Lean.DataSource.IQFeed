@@ -14,12 +14,11 @@
  *
 */
 
-using System;
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     public class TextLineEventArgs : EventArgs
     {

@@ -14,12 +14,11 @@
  *
 */
 
-using System;
 using System.Globalization;
 using QuantConnect.Logging;
 using static QuantConnect.StringExtensions;
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
     // Historical stock data lookup events
     public class LookupTickEventArgs : LookupEventArgs

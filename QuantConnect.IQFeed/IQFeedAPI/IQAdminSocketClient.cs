@@ -14,15 +14,13 @@
  *
 */
 
-using System;
-using System.Threading;
 using System.Globalization;
 
 // ToDo: When a command is given, create a default event - command applied.........
 
-namespace QuantConnect.DataSource
+namespace QuantConnect.IQFeed
 {
- 
+
     public class ClientStatsEventArgs : EventArgs 
     {
         internal ClientStatsEventArgs(string line)
