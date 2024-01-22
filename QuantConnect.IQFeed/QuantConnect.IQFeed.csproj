@@ -2,21 +2,21 @@
 	<PropertyGroup>
 		<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
 		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <TargetFramework>net6.0</TargetFramework>
-    <Product>QuantConnect.IQFeed</Product>
+		<TargetFramework>net6.0</TargetFramework>
+		<Product>QuantConnect.IQFeed</Product>
 		<AssemblyName>QuantConnect.IQFeed</AssemblyName>
 		<RootNamespace>QuantConnect.IQFeed</RootNamespace>
 		<AssemblyTitle>QuantConnect.IQFeed</AssemblyTitle>
-    <OutputType>Library</OutputType>
-	  <OutputPath>bin\$(Configuration)</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<OutputType>Library</OutputType>
+		<OutputPath>bin\$(Configuration)</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<Description>QuantConnect LEAN IQFeed Data Source: IQFeed Data Source plugin for Lean</Description>
 
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-  </PropertyGroup>
+	</PropertyGroup>
 
 	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
 		<DebugType>full</DebugType>
@@ -32,15 +32,16 @@
 		<Compile Include="..\..\Lean\Common\Properties\SharedAssemblyInfo.cs" Link="Properties\SharedAssemblyInfo.cs" />
 	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="IQFeed.CSharpApiClient" Version="2.7.0" />
-    <PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.16155" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="IQFeed.CSharpApiClient" Version="2.7.0" />
+		<PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.*" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Update="IQFeed-symbol-map.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+	<ItemGroup>
+		<None Update="IQFeed-symbol-map.json" Pack="True">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<PackageCopyToOutput>true</PackageCopyToOutput>
+		</None>
+	</ItemGroup>
 
 </Project>
