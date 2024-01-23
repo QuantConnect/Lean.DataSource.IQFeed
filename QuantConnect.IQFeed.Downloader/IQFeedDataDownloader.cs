@@ -15,11 +15,11 @@
 */
 
 using QuantConnect.Data;
+using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
-using IQFeed.CSharpApiClient.Lookup;
 using QuantConnect.Configuration;
-using QuantConnect.Logging;
+using IQFeed.CSharpApiClient.Lookup;
 
 namespace QuantConnect.IQFeed.Downloader
 {
@@ -34,21 +34,32 @@ namespace QuantConnect.IQFeed.Downloader
         private const int NumberOfClients = 8;
 
         /// <summary>
+        /// Lazy initialization for the IQFeed file history provider.
+        /// </summary>
+        /// <remarks>
+        /// This lazy initialization is used to provide deferred creation of the <see cref="IQFeedFileHistoryProvider"/>.
+        /// </remarks>
+        private Lazy<IQFeedFileHistoryProvider> _fileHistoryProviderLazy;
+
+        /// <summary>
         /// The file history provider used by the data downloader.
         /// </summary>
-        private readonly IQFeedFileHistoryProvider _fileHistoryProvider;
+        protected IQFeedFileHistoryProvider _fileHistoryProvider => _fileHistoryProviderLazy.Value;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class.
         /// </summary>
         public IQFeedDataDownloader()
         {
-            // Create and connect the IQFeed lookup client
-            var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), 9100, NumberOfClients);
-            // Establish connection with IQFeed Client
-            lookupClient.Connect();
+            _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
+            {
+                // Create and connect the IQFeed lookup client
+                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), 9100, NumberOfClients);
+                // Establish connection with IQFeed Client
+                lookupClient.Connect();
 
-            _fileHistoryProvider = new IQFeedFileHistoryProvider(lookupClient, new IQFeedDataQueueUniverseProvider(), MarketHoursDatabase.FromDataFolder());
+                return new IQFeedFileHistoryProvider(lookupClient, new IQFeedDataQueueUniverseProvider(), MarketHoursDatabase.FromDataFolder());
+            });
         }
 
         /// <summary>
