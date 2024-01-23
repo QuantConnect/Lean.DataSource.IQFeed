@@ -19,6 +19,7 @@ using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using IQFeed.CSharpApiClient.Lookup;
 using QuantConnect.Configuration;
+using QuantConnect.Logging;
 
 namespace QuantConnect.IQFeed.Downloader
 {
@@ -69,7 +70,15 @@ namespace QuantConnect.IQFeed.Downloader
             }
 
             if (symbol.ID.SecurityType != SecurityType.Equity)
-                throw new NotSupportedException("SecurityType not available: " + symbol.ID.SecurityType);
+            {
+                return Enumerable.Empty<BaseData>();
+            }
+
+            if (tickType == TickType.Quote && resolution != Resolution.Tick)
+            {
+                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
+                return Enumerable.Empty<BaseData>();
+            }
 
             if (endUtc < startUtc)
                 throw new ArgumentException("The end date must be greater or equal than the start date.");
