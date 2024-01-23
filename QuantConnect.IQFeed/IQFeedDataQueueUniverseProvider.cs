@@ -268,13 +268,13 @@ namespace QuantConnect.IQFeed
 
             if (mapExists)
             {
-                Log.Trace("Loading IQFeed futures symbol map file...");
+                Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Loading IQFeed futures symbol map file...");
                 _iqFeedNameMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText(iqfeedNameMapFullName));
             }
 
             if (!universeExists)
             {
-                Log.Trace("Loading and unzipping IQFeed symbol universe file ({0})...", uri);
+                Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Loading and unzipping IQFeed symbol universe file ({0})...", uri);
 
                 using (var client = new WebClient())
                 {
@@ -286,7 +286,7 @@ namespace QuantConnect.IQFeed
             }
             else
             {
-                Log.Trace("Found up-to-date IQFeed symbol universe file in local cache. Loading it...");
+                Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Found up-to-date IQFeed symbol universe file in local cache. Loading it...");
             }
 
             var symbolCache = new Dictionary<Symbol, SymbolData>();
@@ -303,7 +303,7 @@ namespace QuantConnect.IQFeed
 
                 if (lineCounter % 100000 == 0)
                 {
-                    Log.Trace($"{lineCounter} lines read.");
+                    Log.Debug($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Processing file '{todayFullCsvName}': {lineCounter} lines read so far.");
                 }
 
                 prevPosition = currentPosition;
@@ -442,13 +442,13 @@ namespace QuantConnect.IQFeed
 
             if (!mapExists)
             {
-                Log.Trace("Saving IQFeed futures symbol map file...");
+                Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: IQFeed futures symbol map file not found. Saving a new map file...");
                 File.WriteAllText(iqfeedNameMapFullName, JsonConvert.SerializeObject(_iqFeedNameMap));
             }
 
             symbolUniverse.AddRange(symbolCache.Values);
 
-            Log.Trace("Finished loading IQFeed symbol universe file.");
+            Log.Debug($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Finished loading IQFeed symbol universe file.");
 
             return symbolUniverse;
         }
