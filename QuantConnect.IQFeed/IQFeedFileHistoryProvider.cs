@@ -191,7 +191,8 @@ namespace QuantConnect.IQFeed
                     (decimal)interval.High,
                     (decimal)interval.Low,
                     (decimal)interval.Close,
-                    interval.PeriodVolume
+                    interval.PeriodVolume,
+                    request.Resolution.ToTimeSpan()
                 );
             }
 

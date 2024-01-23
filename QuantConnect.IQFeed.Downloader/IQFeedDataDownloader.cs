@@ -15,26 +15,51 @@
 */
 
 using QuantConnect.Data;
+using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
+using QuantConnect.Configuration;
+using IQFeed.CSharpApiClient.Lookup;
 
 namespace QuantConnect.IQFeed.Downloader
 {
     /// <summary>
-    /// IQFeed Data Downloader class 
+    /// Represents a data downloader for retrieving historical market data using IQFeed.
     /// </summary>
     public class IQFeedDataDownloader : IDataDownloader
     {
-        private readonly IQFeedFileHistoryProvider _fileHistoryProvider;
-        private readonly TickType _tickType;
+        /// <summary>
+        /// The number of IQFeed clients to use for parallel processing.
+        /// </summary>
+        private const int NumberOfClients = 8;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class
+        /// Lazy initialization for the IQFeed file history provider.
         /// </summary>
-        /// <param name="fileHistoryProvider"></param>
-        public IQFeedDataDownloader(IQFeedFileHistoryProvider fileHistoryProvider)
+        /// <remarks>
+        /// This lazy initialization is used to provide deferred creation of the <see cref="IQFeedFileHistoryProvider"/>.
+        /// </remarks>
+        private Lazy<IQFeedFileHistoryProvider> _fileHistoryProviderLazy;
+
+        /// <summary>
+        /// The file history provider used by the data downloader.
+        /// </summary>
+        protected IQFeedFileHistoryProvider _fileHistoryProvider => _fileHistoryProviderLazy.Value;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class.
+        /// </summary>
+        public IQFeedDataDownloader()
         {
-            _fileHistoryProvider = fileHistoryProvider;
+            _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
+            {                
+                // Create and connect the IQFeed lookup client
+                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients);
+                // Establish connection with IQFeed Client
+                lookupClient.Connect();
+
+                return new IQFeedFileHistoryProvider(lookupClient, new IQFeedDataQueueUniverseProvider(), MarketHoursDatabase.FromDataFolder());
+            });
         }
 
         /// <summary>
@@ -56,7 +81,15 @@ namespace QuantConnect.IQFeed.Downloader
             }
 
             if (symbol.ID.SecurityType != SecurityType.Equity)
-                throw new NotSupportedException("SecurityType not available: " + symbol.ID.SecurityType);
+            {
+                return Enumerable.Empty<BaseData>();
+            }
+
+            if (tickType == TickType.Quote && resolution != Resolution.Tick)
+            {
+                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
+                return Enumerable.Empty<BaseData>();
+            }
 
             if (endUtc < startUtc)
                 throw new ArgumentException("The end date must be greater or equal than the start date.");

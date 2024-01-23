@@ -20,7 +20,6 @@ using QuantConnect.Logging;
 using IQFeed.CSharpApiClient;
 using QuantConnect.Securities;
 using QuantConnect.Configuration;
-using IQFeed.CSharpApiClient.Lookup;
 
 namespace QuantConnect.IQFeed.Downloader
 {
@@ -64,14 +63,9 @@ namespace QuantConnect.IQFeed.Downloader
 
                 // Connect to IQFeed
                 IQFeedLauncher.Start(userName, password, productName, productVersion);
-                var lookupClient = LookupClientFactory.CreateNew(NumberOfClients);
-                lookupClient.Connect();
 
-                // Create IQFeed downloader instance
-                var universeProvider = new IQFeedDataQueueUniverseProvider();
-                var historyProvider = new IQFeedFileHistoryProvider(lookupClient, universeProvider, MarketHoursDatabase.FromDataFolder());
-                var downloader = new IQFeedDataDownloader(historyProvider);
-                var quoteDownloader = new IQFeedDataDownloader(historyProvider);
+                var downloader = new IQFeedDataDownloader();
+                var quoteDownloader = new IQFeedDataDownloader();
 
                 var resolutions = allResolution ? new List<Resolution> { Resolution.Tick, Resolution.Second, Resolution.Minute, Resolution.Hour, Resolution.Daily } : new List<Resolution> { castResolution };
                 var requests = resolutions.SelectMany(r => tickers.Select(t => new { Ticker = t, Resolution = r })).ToList();

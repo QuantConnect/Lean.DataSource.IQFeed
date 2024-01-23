@@ -43,7 +43,7 @@ namespace QuantConnect.IQFeed.Tests
             _historyProvider.Dispose();
         }
 
-        private static IEnumerable<TestCaseData> HistoricalTestParameters
+        internal static IEnumerable<TestCaseData> HistoricalTestParameters
         {
             get
             {
@@ -84,6 +84,13 @@ namespace QuantConnect.IQFeed.Tests
                 return;
             }
 
+            AssertTicksHaveAppropriateTickType(resolution, tickType, historyResponse);
+
+            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
+        }
+
+        internal static void AssertTicksHaveAppropriateTickType(Resolution resolution, TickType tickType, List<Slice> historyResponse)
+        {
             switch (resolution, tickType)
             {
                 case (Resolution.Tick, TickType.Quote):
@@ -93,11 +100,9 @@ namespace QuantConnect.IQFeed.Tests
                     Assert.IsTrue(historyResponse.Any(x => x.Ticks.Any(xx => xx.Value.Count > 0 && xx.Value.Any(t => t.TickType == TickType.Trade))));
                     break;
             };
-
-            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
         }
 
-        private static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse,  bool isEmptyResult)
+        internal static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse,  bool isEmptyResult)
         {
             Assert.IsNotEmpty(historyResponse);
 
@@ -121,7 +126,7 @@ namespace QuantConnect.IQFeed.Tests
 
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = new DateTime(2024, 01, 18, 12, 0, 0);
+            var end = new DateTime(2024, 01, 22, 12, 0, 0);
 
             if (resolution == Resolution.Daily)
             {
