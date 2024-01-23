@@ -126,7 +126,7 @@ namespace QuantConnect.IQFeed.Tests
 
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = new DateTime(2024, 01, 18, 12, 0, 0);
+            var end = new DateTime(2024, 01, 22, 12, 0, 0);
 
             if (resolution == Resolution.Daily)
             {
