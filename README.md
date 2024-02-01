@@ -1,3 +1,5 @@
+![iqfeed](https://github.com/QuantConnect/Lean.DataSource.IQFeed/assets/79997186/a06b71ed-bf73-4adc-aa94-d4f7f065347a)
+
 # Lean IQFeed Data Source Plugin
 
 [![Build Status](https://github.com/QuantConnect/LeanDataSdk/workflows/Build%20%26%20Test/badge.svg)](https://github.com/QuantConnect/LeanDataSdk/actions?query=workflow%3A%22Build%20%26%20Test%22)
