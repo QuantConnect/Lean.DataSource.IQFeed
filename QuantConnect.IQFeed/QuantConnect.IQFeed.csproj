@@ -33,7 +33,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="IQFeed.CSharpApiClient" Version="2.7.0" />
+		<PackageReference Include="IQFeed.CSharpApiClient" Version="2.5.1" />
 		<PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.*" />
 	</ItemGroup>
 

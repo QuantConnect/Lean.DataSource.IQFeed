@@ -17,11 +17,7 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
-using QuantConnect.Data;
-using QuantConnect.Logging;
-using QuantConnect.Data.Market;
 using System.Collections.Generic;
-using QuantConnect.IQFeed.Downloader;
 
 namespace QuantConnect.IQFeed.Tests
 {

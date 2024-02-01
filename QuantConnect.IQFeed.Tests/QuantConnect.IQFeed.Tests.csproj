@@ -23,7 +23,6 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\..\Lean\Tests\QuantConnect.Tests.csproj" />
-		<ProjectReference Include="..\QuantConnect.IQFeed.Downloader\QuantConnect.IQFeed.Downloader.csproj" />
 		<ProjectReference Include="..\QuantConnect.IQFeed\QuantConnect.IQFeed.csproj" />
 	</ItemGroup>
 	<ItemGroup>
