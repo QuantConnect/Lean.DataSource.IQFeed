@@ -54,7 +54,7 @@ namespace QuantConnect.IQFeed.Downloader
             _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
             {                
                 // Create and connect the IQFeed lookup client
-                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients);
+                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
                 // Establish connection with IQFeed Client
                 lookupClient.Connect();
 
