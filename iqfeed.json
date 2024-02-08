@@ -1,0 +1,15 @@
+{
+    "description": "IQFeed provides a high-performance desktop interface to dozens of market data feeds. The QuantConnect integration enables research, backtesting, optimization, and live trading across multiple asset classes. IQFeed only supports Windows desktop installations.",
+    "platforms-features": [
+        {
+            "Platform Support": ["Cloud Platform", "Local Platform", "LEAN CLI"],
+            "Download Data": [0, 1, 1],
+            "Backtesting": [0, 1, 1],
+            "Optimization": [0, 1, 1],
+            "Live Trading": [0, 1, 1]
+        }
+    ],
+    "data-supported": [ "Equity", "Equity Options", "Futures" ], 
+    "documentation": "/docs/v2/lean-cli/datasets/iqfeed",
+    "more-information": "https://www.iqfeed.net/index.cfm?displayaction=data&section=main"
+}
