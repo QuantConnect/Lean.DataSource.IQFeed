@@ -17,7 +17,7 @@
 using System.Diagnostics;
 using QuantConnect.Configuration;
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
 
     public class IQConnect

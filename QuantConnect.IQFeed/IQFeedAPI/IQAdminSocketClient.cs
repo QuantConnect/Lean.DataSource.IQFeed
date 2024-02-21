@@ -18,7 +18,7 @@ using System.Globalization;
 
 // ToDo: When a command is given, create a default event - command applied.........
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
 
     public class ClientStatsEventArgs : EventArgs 

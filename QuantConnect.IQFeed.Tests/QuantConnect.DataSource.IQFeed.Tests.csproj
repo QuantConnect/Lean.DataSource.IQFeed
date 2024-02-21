@@ -6,10 +6,10 @@
 		<IsPackable>false</IsPackable>
 		<TestProjectType>UnitTest</TestProjectType>
 		<OutputPath>bin\$(Configuration)\</OutputPath>
-		<Product>QuantConnect.DataSource.IQFeed.Tests</Product>
-		<AssemblyName>QuantConnect.DataSource.IQFeed.Tests</AssemblyName>
-		<RootNamespace>QuantConnect.DataSource.IQFeed.Tests</RootNamespace>
-		<AssemblyTitle>QuantConnect.DataSource.IQFeed.Tests</AssemblyTitle>
+		<Product>QuantConnect.Lean.DataSource.IQFeed.Tests</Product>
+		<AssemblyName>QuantConnect.Lean.DataSource.IQFeed.Tests</AssemblyName>
+		<RootNamespace>QuantConnect.Lean.DataSource.IQFeed.Tests</RootNamespace>
+		<AssemblyTitle>QuantConnect.Lean.DataSource.IQFeed.Tests</AssemblyTitle>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
 	<ItemGroup>

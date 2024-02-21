@@ -23,7 +23,7 @@ using QuantConnect.Securities;
 using System.Collections.Generic;
 using QuantConnect.Data.Market;
 
-namespace QuantConnect.DataSource.IQFeed.Tests
+namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedHistoryProviderTests

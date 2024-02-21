@@ -19,7 +19,7 @@ using QuantConnect.Util;
 using QuantConnect.Brokerages;
 using QuantConnect.Interfaces;
 
-namespace QuantConnect.DataSource.IQFeed.Tests
+namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
     /// <summary>
     ///  Test fixture is explicit, because tests are dependent on network and are long

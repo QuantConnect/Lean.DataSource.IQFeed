@@ -14,7 +14,7 @@
  *
 */
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     public class Time
     {

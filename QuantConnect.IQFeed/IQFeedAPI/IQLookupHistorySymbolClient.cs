@@ -18,7 +18,7 @@ using System.Globalization;
 using QuantConnect.Logging;
 using static QuantConnect.StringExtensions;
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     // Historical stock data lookup events
     public class LookupTickEventArgs : LookupEventArgs

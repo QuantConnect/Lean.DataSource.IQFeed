@@ -23,7 +23,7 @@ using System.Collections.Concurrent;
 using IQFeed.CSharpApiClient.Lookup.Historical.Enums;
 using IQFeed.CSharpApiClient.Lookup.Historical.Messages;
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     /// <summary>
     /// IQFeed history provider downloading data directly to disk to reduce memory impact when processing large tick request.

@@ -16,7 +16,7 @@
 
 using System.Collections.Concurrent;
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     public class LookupTableMarketEventArgs : LookupEventArgs
     {

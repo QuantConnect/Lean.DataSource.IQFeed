@@ -35,7 +35,7 @@ using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
-namespace QuantConnect.DataSource.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     /// <summary>
     /// IQFeedDataProvider is an implementation of IDataQueueHandler and IHistoryProvider

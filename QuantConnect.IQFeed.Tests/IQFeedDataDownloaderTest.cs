@@ -19,7 +19,7 @@ using System.Linq;
 using NUnit.Framework;
 using System.Collections.Generic;
 
-namespace QuantConnect.DataSource.IQFeed.Tests
+namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedDataDownloaderTest
