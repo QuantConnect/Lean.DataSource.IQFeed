@@ -22,7 +22,7 @@ using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using QuantConnect.Tests;
 
-namespace QuantConnect.IQFeed.Tests
+namespace QuantConnect.DataSource.IQFeed.Tests
 {
     [SetUpFixture]
     public class TestSetup

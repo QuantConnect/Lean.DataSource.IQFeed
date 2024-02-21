@@ -16,7 +16,7 @@
 using System;
 using NUnit.Framework;
 
-namespace QuantConnect.IQFeed.Tests
+namespace QuantConnect.DataSource.IQFeed.Tests
 {
     [TestFixture]
     public class IQFeedSymbolRepresentationTests

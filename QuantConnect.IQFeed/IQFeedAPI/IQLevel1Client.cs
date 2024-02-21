@@ -17,7 +17,7 @@
 using System.Globalization;
 using Timer = System.Timers.Timer;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.DataSource.IQFeed
 {
     public class Level1ServerDisconnectedArgs : Level1TextLineEventArgs
     {

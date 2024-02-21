@@ -21,7 +21,7 @@ using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using IQFeed.CSharpApiClient.Lookup;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.DataSource.IQFeed
 {
     /// <summary>
     /// Represents a data downloader for retrieving historical market data using IQFeed.

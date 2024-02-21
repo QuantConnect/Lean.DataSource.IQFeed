@@ -19,7 +19,7 @@ using System.Net.Sockets;
 using System.Globalization;
 using QuantConnect.Configuration;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.DataSource.IQFeed
 {
     public enum LookupSequence
     {

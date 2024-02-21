@@ -3,10 +3,10 @@
 		<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
 		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
 		<TargetFramework>net6.0</TargetFramework>
-		<Product>QuantConnect.IQFeed</Product>
-		<AssemblyName>QuantConnect.IQFeed</AssemblyName>
-		<RootNamespace>QuantConnect.IQFeed</RootNamespace>
-		<AssemblyTitle>QuantConnect.IQFeed</AssemblyTitle>
+		<Product>QuantConnect.DataSource.IQFeed</Product>
+		<AssemblyName>QuantConnect.DataSource.IQFeed</AssemblyName>
+		<RootNamespace>QuantConnect.DataSource.IQFeed</RootNamespace>
+		<AssemblyTitle>QuantConnect.DataSource.IQFeed</AssemblyTitle>
 		<OutputType>Library</OutputType>
 		<OutputPath>bin\$(Configuration)</OutputPath>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

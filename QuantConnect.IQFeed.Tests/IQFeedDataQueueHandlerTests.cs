@@ -26,7 +26,7 @@ using QuantConnect.Data.Market;
 using System.Collections.Generic;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
-namespace QuantConnect.IQFeed.Tests
+namespace QuantConnect.DataSource.IQFeed.Tests
 {
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedDataQueueHandlerTests

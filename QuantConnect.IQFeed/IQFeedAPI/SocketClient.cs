@@ -18,7 +18,7 @@ using System.Text;
 using System.Net;
 using System.Net.Sockets;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.DataSource.IQFeed
 {
     public class TextLineEventArgs : EventArgs
     {
