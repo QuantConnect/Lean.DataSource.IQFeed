@@ -28,12 +28,12 @@ namespace QuantConnect.DataSource.IQFeed.Tests
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedHistoryProviderTests
     {
-        private IQFeedDataQueueHandler _historyProvider;
+        private IQFeedDataProvider _historyProvider;
 
         [SetUp]
         public void SetUp()
         {
-            _historyProvider = new IQFeedDataQueueHandler();
+            _historyProvider = new IQFeedDataProvider();
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
         }
 

@@ -38,9 +38,9 @@ using HistoryRequest = QuantConnect.Data.HistoryRequest;
 namespace QuantConnect.DataSource.IQFeed
 {
     /// <summary>
-    /// IQFeedDataQueueHandler is an implementation of IDataQueueHandler and IHistoryProvider
+    /// IQFeedDataProvider is an implementation of IDataQueueHandler and IHistoryProvider
     /// </summary>
-    public class IQFeedDataQueueHandler : HistoryProviderBase, IDataQueueHandler, IDataQueueUniverseProvider
+    public class IQFeedDataProvider : HistoryProviderBase, IDataQueueHandler, IDataQueueUniverseProvider
     {
         private bool _isConnected;
         private readonly HashSet<Symbol> _symbols;
@@ -63,9 +63,9 @@ namespace QuantConnect.DataSource.IQFeed
         public override int DataPointCount { get; } = 0;
 
         /// <summary>
-        /// IQFeedDataQueueHandler is an implementation of IDataQueueHandler:
+        /// IQFeedDataProvider is an implementation of IDataQueueHandler:
         /// </summary>
-        public IQFeedDataQueueHandler()
+        public IQFeedDataProvider()
         {
             _symbols = new HashSet<Symbol>();
             _underlyings = new Dictionary<Symbol, Symbol>();

@@ -29,14 +29,14 @@ using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 namespace QuantConnect.DataSource.IQFeed.Tests
 {
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
-    public class IQFeedDataQueueHandlerTests
+    public class IQFeedDataProviderTests
     {
-        private IQFeedDataQueueHandler _iqFeed;
+        private IQFeedDataProvider _iqFeed;
 
         [SetUp]
         public void SetUp()
         {
-            _iqFeed = new IQFeedDataQueueHandler();
+            _iqFeed = new IQFeedDataProvider();
         }
 
         [TearDown]
