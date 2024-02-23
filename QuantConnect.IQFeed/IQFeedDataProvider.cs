@@ -228,11 +228,33 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <param name="requests">The historical data requests</param>
         /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
         /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
-        public override IEnumerable<Slice> GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
+        public override IEnumerable<Slice>? GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
         {
+            var subscriptions = new List<IEnumerable<Slice>>();
             foreach (var request in requests)
             {
-                foreach (var slice in _historyPort.ProcessHistoryRequests(request))
+                var history = _historyPort.ProcessHistoryRequests(request);
+
+                if (history == null)
+                {
+                    continue;
+                }
+
+                subscriptions.Add(history);
+            }
+
+            if (subscriptions.Count == 0)
+            {
+                return null;
+            }
+            return GetHistoryBySlice(subscriptions);
+        }
+
+        private IEnumerable<Slice> GetHistoryBySlice(List<IEnumerable<Slice>> subscriptions)
+        {
+            foreach (var subscription in subscriptions)
+            {
+                foreach (var slice in subscription)
                 {
                     yield return slice;
                 }
@@ -750,9 +772,19 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
 
         /// <summary>
+        /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
+        /// </summary>
+        private bool _invalidSecurityTypeWarningFired;
+
+        /// <summary>
+        /// Indicates whether the warning for invalid <see cref="TickType.Quote"/> and <seealso cref="Resolution.Tick"/> has been fired.
+        /// </summary>
+        private bool _invalidTickTypeWithInvalidResolutionTypeWarningFired;
+
+        /// <summary>
         /// Variable indicating whether a message for unsupported tick types has been logged to prevent log spam.
         /// </summary>
-        private bool _unsupportedTickTypeMessagedLogged;        
+        private bool _unsupportedTickTypeMessagedLogged;
 
         /// <summary>
         /// ...
@@ -778,14 +810,19 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <summary>
         /// Populate request data
         /// </summary>
-        public IEnumerable<Slice> ProcessHistoryRequests(HistoryRequest request)
+        public IEnumerable<Slice>? ProcessHistoryRequests(HistoryRequest request)
         {
             // skipping universe and canonical symbols
             if (!CanHandle(request.Symbol) ||
                 (request.Symbol.ID.SecurityType == SecurityType.Option && request.Symbol.IsCanonical()) ||
                 (request.Symbol.ID.SecurityType == SecurityType.Future && request.Symbol.IsCanonical()))
             {
-                yield break;
+                if (!_invalidSecurityTypeWarningFired)
+                {
+                    Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Unsupported SecurityType '{request.Symbol.ID.SecurityType}' for symbol '{request.Symbol}'");
+                    _invalidSecurityTypeWarningFired = true;
+                }
+                return null;
             }
 
             if (request.TickType == TickType.OpenInterest)
@@ -795,13 +832,17 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Unsupported tick type: {request.TickType}");
                     _unsupportedTickTypeMessagedLogged = true;
                 }
-                yield break;
+                return null;
             }
 
             if (request.TickType == TickType.Quote && request.Resolution != Resolution.Tick)
             {
-                Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {request.Resolution}");
-                yield break;
+                if (!_invalidTickTypeWithInvalidResolutionTypeWarningFired)
+                {
+                    Log.Trace($"{nameof(HistoryPort)}.{nameof(ProcessHistoryRequests)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {request.Resolution}");
+                    _invalidTickTypeWithInvalidResolutionTypeWarningFired = true;
+                }
+                return null;
             }
 
             // Set this process status
@@ -848,11 +889,20 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 continue;
             }
 
+            return GetSlice(exchangeTz);
+        }
+
+        private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz)
+        {
             // After all data arrive, we pass it to the algorithm through memory and write to a file
             foreach (var key in _currentRequest.Keys)
             {
-                List<BaseData> tradeBars;
-                if (_currentRequest.TryRemove(key, out tradeBars))
+                if (string.IsNullOrEmpty(key))
+                {
+                    continue;
+                }
+
+                if (_currentRequest.TryRemove(key, out var tradeBars))
                 {
                     foreach (var tradeBar in tradeBars)
                     {

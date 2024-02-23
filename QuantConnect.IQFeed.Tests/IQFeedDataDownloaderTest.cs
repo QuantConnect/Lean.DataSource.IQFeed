@@ -35,20 +35,20 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
         private static IEnumerable<TestCaseData> HistoricalDataTestCases => IQFeedHistoryProviderTests.HistoricalTestParameters;
 
         [TestCaseSource(nameof(HistoricalDataTestCases))]
-        public void DownloadsHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, bool isEmptyResult)
+        public void DownloadsHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, bool isNullResult)
         {
             var request = IQFeedHistoryProviderTests.CreateHistoryRequest(symbol, resolution, tickType, period);
 
             var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
-            var downloadResponse = _downloader.Get(parameters).ToList();
+            var downloadResponse = _downloader.Get(parameters)?.ToList();
 
-            if (isEmptyResult)
+            if (isNullResult)
             {
-                Assert.IsEmpty(downloadResponse);
+                Assert.IsNull(downloadResponse);
                 return;
             }
 
-            IQFeedHistoryProviderTests.AssertHistoricalDataResponse(resolution, downloadResponse, isEmptyResult);
+            IQFeedHistoryProviderTests.AssertHistoricalDataResponse(resolution, downloadResponse);
         }
     }
 }

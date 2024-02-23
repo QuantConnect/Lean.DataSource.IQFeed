@@ -34,6 +34,21 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private const int NumberOfClients = 8;
 
         /// <summary>
+        /// Indicates whether the warning for invalid history <see cref="TickType"/> has been fired.
+        /// </summary>
+        private bool _invalidHistoryDataTypeWarningFired;
+
+        /// <summary>
+        /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
+        /// </summary>
+        private bool _invalidSecurityTypeWarningFired;
+
+        /// <summary>
+        /// Indicates whether the warning for invalid <see cref="TickType.Quote"/> and <seealso cref="Resolution.Tick"/> has been fired.
+        /// </summary>
+        private bool _invalidTickTypeWithInvalidResolutionTypeWarningFired;
+
+        /// <summary>
         /// Lazy initialization for the IQFeed file history provider.
         /// </summary>
         /// <remarks>
@@ -52,7 +67,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         public IQFeedDataDownloader()
         {
             _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
-            {                
+            {
                 // Create and connect the IQFeed lookup client
                 var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
                 // Establish connection with IQFeed Client
@@ -67,7 +82,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// </summary>
         /// <param name="dataDownloaderGetParameters">model class for passing in parameters for historical data</param>
         /// <returns>Enumerable of base data for this symbol</returns>
-        public IEnumerable<BaseData> Get(DataDownloaderGetParameters dataDownloaderGetParameters)
+        public IEnumerable<BaseData>? Get(DataDownloaderGetParameters dataDownloaderGetParameters)
         {
             var symbol = dataDownloaderGetParameters.Symbol;
             var resolution = dataDownloaderGetParameters.Resolution;
@@ -77,26 +92,42 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             if (tickType == TickType.OpenInterest)
             {
-                return Enumerable.Empty<BaseData>();
+                if (!_invalidHistoryDataTypeWarningFired)
+                {
+                    Log.Error($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Not supported data type - {tickType}");
+                    _invalidHistoryDataTypeWarningFired = true;
+                }
+                return null;
             }
 
             if (symbol.ID.SecurityType != SecurityType.Equity)
             {
-                return Enumerable.Empty<BaseData>();
+                if (!_invalidSecurityTypeWarningFired)
+                {
+                    Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Unsupported SecurityType '{symbol.SecurityType}' for symbol '{symbol}'");
+                    _invalidSecurityTypeWarningFired = true;
+                }
+                return null;
             }
 
             if (tickType == TickType.Quote && resolution != Resolution.Tick)
             {
-                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
-                return Enumerable.Empty<BaseData>();
+                if (!_invalidTickTypeWithInvalidResolutionTypeWarningFired)
+                {
+                    Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
+                    _invalidTickTypeWithInvalidResolutionTypeWarningFired = true;
+                }
+                return null;
             }
 
             if (endUtc < startUtc)
-                throw new ArgumentException("The end date must be greater or equal than the start date.");
+            {
+                return null;
+            }
 
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 
-            return _fileHistoryProvider.ProcessHistoryRequests(
+            var history = _fileHistoryProvider.ProcessHistoryRequests(
                 new HistoryRequest(
                     startUtc,
                     endUtc,
@@ -110,6 +141,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     false,
                     DataNormalizationMode.Adjusted,
                     tickType));
+
+            return history;
         }
     }
 }

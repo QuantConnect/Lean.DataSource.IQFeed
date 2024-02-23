@@ -44,14 +44,14 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             _filesByRequestKeyCache = new ConcurrentDictionary<string, string>();
         }
 
-        public IEnumerable<BaseData> ProcessHistoryRequests(HistoryRequest request)
+        public IEnumerable<BaseData>? ProcessHistoryRequests(HistoryRequest request)
         {
             // skipping universe and canonical symbols
             if (!CanHandle(request.Symbol) ||
                 request.Symbol.ID.SecurityType == SecurityType.Option && request.Symbol.IsCanonical() ||
                 request.Symbol.ID.SecurityType == SecurityType.Future && request.Symbol.IsCanonical())
             {
-                return Enumerable.Empty<BaseData>();
+                return null;
             }
 
             // skipping empty ticker
@@ -59,7 +59,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             if (string.IsNullOrEmpty(ticker))
             {
                 Log.Trace($"IQFeedFileHistoryProvider.ProcessHistoryRequests(): Unable to retrieve ticker from Symbol: ${request.Symbol}");
-                return Enumerable.Empty<BaseData>();
+                return null;
             }
 
             var start = request.StartTimeUtc.ConvertFromUtc(TimeZones.NewYork);
