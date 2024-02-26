@@ -77,19 +77,19 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             if (tickType == TickType.OpenInterest)
             {
-                    Log.Error($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Not supported data type - {tickType}");
+                Log.Error($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Not supported data type - {tickType}");
                 return null;
             }
 
             if (symbol.ID.SecurityType != SecurityType.Equity)
             {
-                    Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Unsupported SecurityType '{symbol.SecurityType}' for symbol '{symbol}'");
+                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Unsupported SecurityType '{symbol.SecurityType}' for symbol '{symbol}'");
                 return null;
             }
 
             if (tickType == TickType.Quote && resolution != Resolution.Tick)
             {
-                    Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
+                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
                 return null;
             }
 
@@ -100,7 +100,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 
-            var history = _fileHistoryProvider.ProcessHistoryRequests(
+            return _fileHistoryProvider.ProcessHistoryRequests(
                 new HistoryRequest(
                     startUtc,
                     endUtc,
@@ -114,8 +114,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     false,
                     DataNormalizationMode.Adjusted,
                     tickType));
-
-            return history;
         }
     }
 }

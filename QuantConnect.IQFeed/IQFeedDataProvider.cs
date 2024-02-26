@@ -247,18 +247,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             {
                 return null;
             }
-            return GetHistoryBySlice(subscriptions);
-        }
 
-        private IEnumerable<Slice> GetHistoryBySlice(List<IEnumerable<Slice>> subscriptions)
-        {
-            foreach (var subscription in subscriptions)
-            {
-                foreach (var slice in subscription)
-                {
-                    yield return slice;
-                }
-            }
+            return subscriptions.SelectMany(x => x);
         }
 
         /// <summary>
@@ -897,11 +887,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             // After all data arrive, we pass it to the algorithm through memory and write to a file
             foreach (var key in _currentRequest.Keys)
             {
-                if (string.IsNullOrEmpty(key))
-                {
-                    continue;
-                }
-
                 if (_currentRequest.TryRemove(key, out var tradeBars))
                 {
                     foreach (var tradeBar in tradeBars)
