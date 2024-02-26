@@ -75,29 +75,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             var endUtc = dataDownloaderGetParameters.EndUtc;
             var tickType = dataDownloaderGetParameters.TickType;
 
-            if (tickType == TickType.OpenInterest)
-            {
-                Log.Error($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Not supported data type - {tickType}");
-                return null;
-            }
-
-            if (symbol.ID.SecurityType != SecurityType.Equity)
-            {
-                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Unsupported SecurityType '{symbol.SecurityType}' for symbol '{symbol}'");
-                return null;
-            }
-
-            if (tickType == TickType.Quote && resolution != Resolution.Tick)
-            {
-                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
-                return null;
-            }
-
-            if (endUtc < startUtc)
-            {
-                return null;
-            }
-
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 
             return _fileHistoryProvider.ProcessHistoryRequests(

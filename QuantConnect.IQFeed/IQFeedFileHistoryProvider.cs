@@ -36,6 +36,31 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private readonly MarketHoursDatabase _marketHoursDatabase;
         private readonly ConcurrentDictionary<string, string> _filesByRequestKeyCache;
 
+        /// <summary>
+        /// Indicates whether an error has been fired due to invalid conditions if the TickType is <seealso cref="TickType.Quote"/> and the <seealso cref="Resolution"/> is not equal <seealso cref="Resolution.Tick"/>.
+        /// </summary>
+        private bool _invalidTickTypeAndResolutionErrorFired;
+
+        /// <summary>
+        /// Indicates whether a error for an invalid start time has been fired, where the start time is greater than or equal to the end time in UTC.
+        /// </summary>
+        private bool _invalidStartTimeErrorFired;
+
+        /// <summary>
+        /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
+        /// </summary>
+        private bool _invalidSecurityTypeWarningFired;
+
+        /// <summary>
+        /// Indicates whether the warning for invalid history <see cref="TickType"/> has been fired.
+        /// </summary>
+        private bool _invalidHistoryDataTypeWarningFired;
+
+        /// <summary>
+        /// Indicates whether the error for invalid <see cref="Symbol"/> has been fired.
+        /// </summary>
+        private bool _invalidBrokerageSymbolErrorFired;
+
         public IQFeedFileHistoryProvider(LookupClient lookupClient, ISymbolMapper symbolMapper, MarketHoursDatabase marketHoursDatabase)
         {
             _lookupClient = lookupClient;
@@ -51,6 +76,41 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 request.Symbol.ID.SecurityType == SecurityType.Option && request.Symbol.IsCanonical() ||
                 request.Symbol.ID.SecurityType == SecurityType.Future && request.Symbol.IsCanonical())
             {
+                if (!_invalidSecurityTypeWarningFired)
+                {
+                    Log.Trace($"{nameof(IQFeedFileHistoryProvider)}.{nameof(ProcessHistoryRequests)}: Unsupported SecurityType '{request.Symbol.SecurityType}' for symbol '{request.Symbol.SecurityType}'");
+                    _invalidSecurityTypeWarningFired = true;
+                }
+                return null;
+            }
+
+            if (request.TickType == TickType.OpenInterest)
+            {
+                if (!_invalidHistoryDataTypeWarningFired)
+                {
+                    Log.Error($"{nameof(IQFeedFileHistoryProvider)}.{nameof(ProcessHistoryRequests)}: Not supported data type - {request.TickType}");
+                    _invalidHistoryDataTypeWarningFired = true;
+                }
+                return null;
+            }
+
+            if (request.TickType == TickType.Quote && request.Resolution != Resolution.Tick)
+            {
+                if (!_invalidTickTypeAndResolutionErrorFired)
+                {
+                    Log.Error($"{nameof(IQFeedFileHistoryProvider)}.{nameof(ProcessHistoryRequests)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {request.Resolution}");
+                    _invalidTickTypeAndResolutionErrorFired = true;
+                }
+                return null;
+            }
+
+            if (request.EndTimeUtc < request.StartTimeUtc)
+            {
+                if (!_invalidStartTimeErrorFired)
+                {
+                    Log.Error($"{nameof(IQFeedFileHistoryProvider)}.{nameof(ProcessHistoryRequests)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
+                    _invalidStartTimeErrorFired = true;
+                }
                 return null;
             }
 
@@ -58,7 +118,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
             if (string.IsNullOrEmpty(ticker))
             {
-                Log.Trace($"IQFeedFileHistoryProvider.ProcessHistoryRequests(): Unable to retrieve ticker from Symbol: ${request.Symbol}");
+                if (!_invalidBrokerageSymbolErrorFired)
+                {
+                    Log.Trace($"IQFeedFileHistoryProvider.ProcessHistoryRequests(): Unable to retrieve ticker from Symbol: ${request.Symbol}");
+                    _invalidBrokerageSymbolErrorFired = true;
+                }
                 return null;
             }
 
