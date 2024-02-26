@@ -34,21 +34,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private const int NumberOfClients = 8;
 
         /// <summary>
-        /// Indicates whether the warning for invalid history <see cref="TickType"/> has been fired.
-        /// </summary>
-        private bool _invalidHistoryDataTypeWarningFired;
-
-        /// <summary>
-        /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
-        /// </summary>
-        private bool _invalidSecurityTypeWarningFired;
-
-        /// <summary>
-        /// Indicates whether the warning for invalid <see cref="TickType.Quote"/> and <seealso cref="Resolution.Tick"/> has been fired.
-        /// </summary>
-        private bool _invalidTickTypeWithInvalidResolutionTypeWarningFired;
-
-        /// <summary>
         /// Lazy initialization for the IQFeed file history provider.
         /// </summary>
         /// <remarks>
@@ -92,31 +77,19 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             if (tickType == TickType.OpenInterest)
             {
-                if (!_invalidHistoryDataTypeWarningFired)
-                {
                     Log.Error($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Not supported data type - {tickType}");
-                    _invalidHistoryDataTypeWarningFired = true;
-                }
                 return null;
             }
 
             if (symbol.ID.SecurityType != SecurityType.Equity)
             {
-                if (!_invalidSecurityTypeWarningFired)
-                {
                     Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Unsupported SecurityType '{symbol.SecurityType}' for symbol '{symbol}'");
-                    _invalidSecurityTypeWarningFired = true;
-                }
                 return null;
             }
 
             if (tickType == TickType.Quote && resolution != Resolution.Tick)
             {
-                if (!_invalidTickTypeWithInvalidResolutionTypeWarningFired)
-                {
                     Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
-                    _invalidTickTypeWithInvalidResolutionTypeWarningFired = true;
-                }
                 return null;
             }
 
