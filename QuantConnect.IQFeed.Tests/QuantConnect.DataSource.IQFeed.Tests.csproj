@@ -6,10 +6,10 @@
 		<IsPackable>false</IsPackable>
 		<TestProjectType>UnitTest</TestProjectType>
 		<OutputPath>bin\$(Configuration)\</OutputPath>
-		<Product>QuantConnect.IQFeed.Tests</Product>
-		<AssemblyName>QuantConnect.IQFeed.Tests</AssemblyName>
-		<RootNamespace>QuantConnect.IQFeed.Tests</RootNamespace>
-		<AssemblyTitle>QuantConnect.IQFeed.Tests</AssemblyTitle>
+		<Product>QuantConnect.Lean.DataSource.IQFeed.Tests</Product>
+		<AssemblyName>QuantConnect.Lean.DataSource.IQFeed.Tests</AssemblyName>
+		<RootNamespace>QuantConnect.Lean.DataSource.IQFeed.Tests</RootNamespace>
+		<AssemblyTitle>QuantConnect.Lean.DataSource.IQFeed.Tests</AssemblyTitle>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
 	<ItemGroup>
@@ -23,7 +23,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\..\Lean\Tests\QuantConnect.Tests.csproj" />
-		<ProjectReference Include="..\QuantConnect.IQFeed\QuantConnect.IQFeed.csproj" />
+		<ProjectReference Include="..\QuantConnect.IQFeed\QuantConnect.DataSource.IQFeed.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 		<None Remove="config.json" />

@@ -25,7 +25,7 @@ using QuantConnect.Securities;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Transport;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     /// <summary>
     /// Class implements several interfaces to support IQFeed symbol mapping to LEAN and symbol lookup

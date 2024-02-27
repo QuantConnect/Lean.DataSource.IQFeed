@@ -21,7 +21,7 @@ using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using IQFeed.CSharpApiClient.Lookup;
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     /// <summary>
     /// Represents a data downloader for retrieving historical market data using IQFeed.
@@ -52,7 +52,7 @@ namespace QuantConnect.IQFeed
         public IQFeedDataDownloader()
         {
             _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
-            {                
+            {
                 // Create and connect the IQFeed lookup client
                 var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
                 // Establish connection with IQFeed Client
@@ -67,32 +67,13 @@ namespace QuantConnect.IQFeed
         /// </summary>
         /// <param name="dataDownloaderGetParameters">model class for passing in parameters for historical data</param>
         /// <returns>Enumerable of base data for this symbol</returns>
-        public IEnumerable<BaseData> Get(DataDownloaderGetParameters dataDownloaderGetParameters)
+        public IEnumerable<BaseData>? Get(DataDownloaderGetParameters dataDownloaderGetParameters)
         {
             var symbol = dataDownloaderGetParameters.Symbol;
             var resolution = dataDownloaderGetParameters.Resolution;
             var startUtc = dataDownloaderGetParameters.StartUtc;
             var endUtc = dataDownloaderGetParameters.EndUtc;
             var tickType = dataDownloaderGetParameters.TickType;
-
-            if (tickType == TickType.OpenInterest)
-            {
-                return Enumerable.Empty<BaseData>();
-            }
-
-            if (symbol.ID.SecurityType != SecurityType.Equity)
-            {
-                return Enumerable.Empty<BaseData>();
-            }
-
-            if (tickType == TickType.Quote && resolution != Resolution.Tick)
-            {
-                Log.Trace($"{nameof(IQFeedDataDownloader)}.{nameof(Get)}: Historical data request with TickType 'Quote' is not supported for resolutions other than Tick. Requested Resolution: {resolution}");
-                return Enumerable.Empty<BaseData>();
-            }
-
-            if (endUtc < startUtc)
-                throw new ArgumentException("The end date must be greater or equal than the start date.");
 
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 

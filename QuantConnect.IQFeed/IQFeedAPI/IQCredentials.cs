@@ -14,7 +14,7 @@
  *
 */
 
-namespace QuantConnect.IQFeed
+namespace QuantConnect.Lean.DataSource.IQFeed
 {
     public class IQCredentials
     {

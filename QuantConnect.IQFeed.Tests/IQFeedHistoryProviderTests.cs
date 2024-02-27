@@ -23,17 +23,17 @@ using QuantConnect.Securities;
 using System.Collections.Generic;
 using QuantConnect.Data.Market;
 
-namespace QuantConnect.IQFeed.Tests
+namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
     [TestFixture, Explicit("This tests require a IQFeed credentials.")]
     public class IQFeedHistoryProviderTests
     {
-        private IQFeedDataQueueHandler _historyProvider;
+        private IQFeedDataProvider _historyProvider;
 
         [SetUp]
         public void SetUp()
         {
-            _historyProvider = new IQFeedDataQueueHandler();
+            _historyProvider = new IQFeedDataProvider();
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
         }
 
@@ -66,27 +66,27 @@ namespace QuantConnect.IQFeed.Tests
 
                 // Not supported Security Types
                 yield return new TestCaseData(Symbol.Create("SPX.XO", SecurityType.Index, Market.CBOE), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true);
-                yield return new TestCaseData(Symbol.CreateFuture("@ESGH24", Market.CME, new DateTime(2024, 3, 21)), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true); 
+                yield return new TestCaseData(Symbol.CreateFuture("@ESGH24", Market.CME, new DateTime(2024, 3, 21)), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true);
 
             }
         }
 
         [TestCaseSource(nameof(HistoricalTestParameters))]
-        public void GetHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, bool isEmptyResult)
+        public void GetHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, bool isNullResult)
         {
             var historyRequests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
 
-            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc).ToList();
+            var historyResponse = _historyProvider.GetHistory(historyRequests, TimeZones.Utc)?.ToList();
 
-            if (isEmptyResult)
+            if (isNullResult)
             {
-                Assert.IsEmpty(historyResponse);
+                Assert.IsNull(historyResponse);
                 return;
             }
 
             AssertTicksHaveAppropriateTickType(resolution, tickType, historyResponse);
 
-            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList(), isEmptyResult);
+            AssertHistoricalDataResponse(resolution, historyResponse.SelectMany(x => x.AllData).ToList());
         }
 
         internal static void AssertTicksHaveAppropriateTickType(Resolution resolution, TickType tickType, List<Slice> historyResponse)
@@ -102,7 +102,7 @@ namespace QuantConnect.IQFeed.Tests
             };
         }
 
-        internal static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse,  bool isEmptyResult)
+        internal static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse)
         {
             Assert.IsNotEmpty(historyResponse);
 
