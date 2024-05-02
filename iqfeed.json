@@ -27,13 +27,11 @@
             ],
             "security-types": [
                 "Equity",
-                "Forex",
                 "Option",
                 "Future"
             ],
             "markets": [
                 "USA",
-                "FXCM",
                 "CME",
                 "NYMEX",
                 "SGX",
