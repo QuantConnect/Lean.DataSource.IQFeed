@@ -11,5 +11,26 @@
     ],
     "data-supported": [ "Equity", "Equity Options", "Futures" ], 
     "documentation": "/docs/v2/lean-cli/datasets/iqfeed",
-    "more-information": "https://www.iqfeed.net/index.cfm?displayaction=data&section=main"
+    "more-information": "https://www.iqfeed.net/index.cfm?displayaction=data&section=main",
+    "module-specification": {
+        "download": {
+            "data-types": [
+                "Trade",
+                "Quote"
+            ],
+            "data-resolutions": [
+                "Tick",
+                "Second",
+                "Minute",
+                "Hour",
+                "Daily"
+            ],
+            "data-supported": [
+                "Equity"
+            ],
+            "data-markets": [
+                "USA"
+            ]
+        }
+    }
 }
