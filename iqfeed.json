@@ -26,10 +26,23 @@
                 "Daily"
             ],
             "security-types": [
-                "Equity"
+                "Equity",
+                "Forex",
+                "Option",
+                "Future"
             ],
             "markets": [
-                "USA"
+                "USA",
+                "FXCM",
+                "CME",
+                "NYMEX",
+                "SGX",
+                "Globex",
+                "COMEX",
+                "CBOT",
+                "CBOE",
+                "ICE",
+                "CFE"
             ]
         }
     }
