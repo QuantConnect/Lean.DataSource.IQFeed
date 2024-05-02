@@ -18,17 +18,17 @@
                 "Trade",
                 "Quote"
             ],
-            "data-resolutions": [
+            "resolutions": [
                 "Tick",
                 "Second",
                 "Minute",
                 "Hour",
                 "Daily"
             ],
-            "data-supported": [
+            "security-types": [
                 "Equity"
             ],
-            "data-markets": [
+            "markets": [
                 "USA"
             ]
         }
