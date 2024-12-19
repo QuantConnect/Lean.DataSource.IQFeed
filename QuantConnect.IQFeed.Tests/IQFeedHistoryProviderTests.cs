@@ -34,7 +34,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
         public void SetUp()
         {
             _historyProvider = new IQFeedDataProvider();
-            _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
+            _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null, null));
         }
 
         [TearDown]
