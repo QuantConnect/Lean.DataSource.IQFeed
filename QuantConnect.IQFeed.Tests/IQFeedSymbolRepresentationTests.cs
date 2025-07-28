@@ -15,12 +15,30 @@
 
 using System;
 using NUnit.Framework;
+using QuantConnect.Securities;
+using System.Collections.Generic;
+using QuantConnect.Configuration;
 
 namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
-    [TestFixture]
+    [TestFixture, Explicit("Requires locally installed and configured IQFeed client, including login credentials and active data subscription.")]
     public class IQFeedSymbolRepresentationTests
     {
+        private IQFeedDataQueueUniverseProvider _dataQueueUniverseProvider;
+
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
+        {
+            if (OS.IsWindows)
+            {
+                // IQConnect is only supported on Windows
+                var connector = new IQConnect(Config.Get("iqfeed-productName"), "1.0");
+                Assert.IsTrue(connector.Launch(), "Failed to launch IQConnect on Windows. Ensure IQFeed is installed and configured properly.");
+            }
+
+            _dataQueueUniverseProvider = new IQFeedDataQueueUniverseProvider();
+        }
+
         [Test]
         public void ParseOptionIQFeedTicker()
         {
@@ -49,6 +67,35 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
             var result = SymbolRepresentation.GenerateOptionTicker(option);
 
             Assert.AreEqual(encodedOption, result);
+        }
+
+        public static IEnumerable<TestCaseData> GetFutureSymbolsTestCases()
+        {
+            // Natural gas futures expire the month previous to the contract month:
+            // Expiry: August -> Contract month: September (U)
+            yield return new TestCaseData("QNGU25", Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27)));
+            // Expiry: December 2025 -> Contract month: January (U) 2026 (26)
+            yield return new TestCaseData("QNGF26", Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 12, 29)));
+
+            // BrentLastDayFinancial futures expire two months previous to the contract month:
+            // Expiry: August -> Contract month: October (V)
+            yield return new TestCaseData("QBZV25", Symbol.CreateFuture(Futures.Energy.BrentLastDayFinancial, Market.NYMEX, new DateTime(2025, 08, 29)));
+            // Expiry: November 2025 -> Contract month: January (F) 2026 (26)
+            yield return new TestCaseData("QBZF26", Symbol.CreateFuture(Futures.Energy.BrentLastDayFinancial, Market.NYMEX, new DateTime(2025, 11, 28)));
+            // Expiry: December 2025 -> Contract month: February (G) 2026 (26)
+            yield return new TestCaseData("QBZG26", Symbol.CreateFuture(Futures.Energy.BrentLastDayFinancial, Market.NYMEX, new DateTime(2025, 12, 31)));
+
+            yield return new TestCaseData("@NQU25", Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19)));
+        }
+
+        [TestCaseSource(nameof(GetFutureSymbolsTestCases))]
+        public void ConvertsFutureSymbolRoundTrip(string brokerageSymbol, Symbol leanSymbol)
+        {
+            var actualBrokerageSymbol = _dataQueueUniverseProvider.GetBrokerageSymbol(leanSymbol);
+            var actualLeanSymbol = _dataQueueUniverseProvider.GetLeanSymbol(brokerageSymbol, default, default);
+
+            Assert.AreEqual(brokerageSymbol, actualBrokerageSymbol);
+            Assert.AreEqual(leanSymbol, actualLeanSymbol);
         }
     }
 }
