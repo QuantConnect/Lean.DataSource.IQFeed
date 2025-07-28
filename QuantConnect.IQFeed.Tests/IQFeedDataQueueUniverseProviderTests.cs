@@ -1,0 +1,52 @@
+﻿/*
+ * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
+ * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+*/
+
+using System;
+using System.Linq;
+using NUnit.Framework;
+using QuantConnect.Interfaces;
+using QuantConnect.Securities;
+using System.Collections.Generic;
+
+namespace QuantConnect.Lean.DataSource.IQFeed.Tests;
+
+[TestFixture]
+public class IQFeedDataQueueUniverseProviderTests
+{
+    private IDataQueueUniverseProvider _iQFeedDataProvider;
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        _iQFeedDataProvider = new IQFeedDataProvider();
+    }
+
+    private static IEnumerable<TestCaseData> LookUpSymbolsTestParameters
+    {
+        get
+        {
+            yield return new TestCaseData(Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27)));
+            yield return new TestCaseData(Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19)));
+        }
+    }
+
+    [Test, TestCaseSource(nameof(LookUpSymbolsTestParameters))]
+    public void LookUpSymbols(Symbol symbol)
+    {
+        var symbols = _iQFeedDataProvider.LookupSymbols(symbol, true, default).ToList();
+        Assert.IsNotEmpty(symbols);
+    }
+}
