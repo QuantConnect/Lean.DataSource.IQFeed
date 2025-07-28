@@ -96,8 +96,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns>IQFeed ticker</returns>
         public string GetBrokerageSymbol(Symbol symbol)
         {
-            string leanSymbol;
-            return _symbols.TryGetValue(symbol, out leanSymbol) ? leanSymbol : string.Empty;
+            return _symbols.TryGetValue(symbol, out var brokerageSymbol) ? brokerageSymbol : string.Empty;
         }
 
         /// <summary>
@@ -387,13 +386,13 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         if (columns[columnSymbol].EndsWith("#") || columns[columnSymbol].EndsWith("#C") || columns[columnSymbol].EndsWith("$$"))
                             continue;
 
-                        var futuresTicker = columns[columnSymbol].TrimStart(new[] { '@' });
+                        var futuresTicker = NormalizeFuturesTicker(columns[columnExchange], columns[columnSymbol]);
 
                         var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
                         var underlyingString = parsed.Underlying;
 
-                        if (_iqFeedNameMap.ContainsKey(underlyingString))
-                            underlyingString = _iqFeedNameMap[underlyingString];
+                        if (_iqFeedNameMap.TryGetValue(underlyingString, out var underlying))
+                            underlyingString = underlying;
                         else
                         {
                             if (!mapExists)
@@ -412,9 +411,32 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         }
 
                         var market = GetFutureMarket(underlyingString, columns[columnExchange]);
+
+                        if (TryParseFutureSymbol(futuresTicker, out var leanFutureSymbol))
+                        {
+                            var placeholderSymbolData = new SymbolData
+                            {
+                                Symbol = leanFutureSymbol,
+                                SecurityCurrency = Currencies.USD,
+                                SecurityExchange = market,
+                                StartPosition = prevPosition,
+                                EndPosition = currentPosition,
+                                Ticker = columns[columnSymbol]
+                            };
+
+                            if (symbolCache.TryAdd(leanFutureSymbol, placeholderSymbolData))
+                            {
+                                break;
+                            }
+                        }
+
                         canonicalSymbol = Symbol.Create(underlyingString, SecurityType.Future, market);
 
-                        if (!symbolCache.ContainsKey(canonicalSymbol))
+                        if (symbolCache.TryGetValue(canonicalSymbol, out var symbolData))
+                        {
+                            symbolData.EndPosition = currentPosition;
+                        }
+                        else
                         {
                             var placeholderSymbolData = new SymbolData
                             {
@@ -422,14 +444,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                                 SecurityCurrency = Currencies.USD,
                                 SecurityExchange = market,
                                 StartPosition = prevPosition,
-                                EndPosition = currentPosition
+                                EndPosition = currentPosition,
+                                Ticker = columns[columnSymbol]
                             };
 
                             symbolCache.Add(canonicalSymbol, placeholderSymbolData);
-                        }
-                        else
-                        {
-                            symbolCache[canonicalSymbol].EndPosition = currentPosition;
                         }
 
                         break;
@@ -517,7 +536,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             continue;
                         }
 
-                        var futuresTicker = columns[columnSymbol].TrimStart(new[] { '@' });
+                        var futuresTicker = NormalizeFuturesTicker(columns[columnExchange], columns[columnSymbol]);
 
                         var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
                         var underlyingString = parsed.Underlying;
@@ -695,18 +714,46 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             }
         }
 
-        public IEnumerable<string> GetBrokerageContractSymbol(Symbol subscribeSymbol)
-        {
-            return _symbols.Where(kpv => kpv.Key.SecurityType == SecurityType.Future && kpv.Key.ID.Symbol == subscribeSymbol.ID.Symbol)
-                .Select(kpv => kpv.Value);
-        }
-
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         /// </summary>
         public void Dispose()
         {
             _dataCacheProvider.DisposeSafely();
+        }
+
+        /// <summary>
+        /// Normalizes the futures ticker by removing exchange-specific electronic contract prefixes.
+        /// </summary>
+        /// <param name="exchange">The exchange code (e.g., "NYMEX", "COMEX", "CBOT", "CME").</param>
+        /// <param name="symbol">The raw symbol from the data feed.</param>
+        /// <returns>The normalized symbol with the exchange-specific prefix removed.</returns>
+        /// <remarks>
+        /// NYMEX and COMEX adopted the 'Q' prefix, whereas CBOT and CME use '@' to represent electronic contracts.
+        /// For unknown exchanges, '@' is removed by default to preserve legacy behavior.
+        /// </remarks>
+        private static string NormalizeFuturesTicker(string exchange, string symbol)
+        {
+            return exchange switch
+            {
+                "COMEX" or "NYMEX" => symbol.TrimStart('Q'),
+                "CBOT" or "CME" => symbol.TrimStart('@'),
+                _ => symbol.TrimStart('@') // Legacy fallback: default handling for unknown exchanges
+            };
+        }
+
+        /// <summary>
+        /// Attempts to parse the specified future ticker string into a Lean <see cref="Symbol"/>.
+        /// </summary>
+        /// <param name="futureTicker">The future ticker string to parse.</param>
+        /// <param name="leanSymbol">
+        /// When this method returns, contains the parsed <see cref="Symbol"/> if the parsing succeeded; otherwise, <c>null</c>.
+        /// </param>
+        /// <returns><c>true</c> if the parsing succeeded; otherwise, <c>false</c>.</returns>
+        private static bool TryParseFutureSymbol(string futureTicker, out Symbol leanSymbol)
+        {
+            leanSymbol = SymbolRepresentation.ParseFutureSymbol(futureTicker);
+            return leanSymbol != null;
         }
     }
 }
