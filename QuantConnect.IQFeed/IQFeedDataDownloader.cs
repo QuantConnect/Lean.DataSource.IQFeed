@@ -14,12 +14,13 @@
  *
 */
 
+using NodaTime;
 using QuantConnect.Data;
-using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using IQFeed.CSharpApiClient.Lookup;
+using System.Collections.Concurrent;
 
 namespace QuantConnect.Lean.DataSource.IQFeed
 {
@@ -34,32 +35,34 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private const int NumberOfClients = 8;
 
         /// <summary>
-        /// Lazy initialization for the IQFeed file history provider.
+        /// Provides access to all available symbols corresponding to a canonical symbol using the IQFeed data source.
         /// </summary>
-        /// <remarks>
-        /// This lazy initialization is used to provide deferred creation of the <see cref="IQFeedFileHistoryProvider"/>.
-        /// </remarks>
-        private Lazy<IQFeedFileHistoryProvider> _fileHistoryProviderLazy;
+        private readonly IQFeedDataQueueUniverseProvider _dataQueueUniverseProvider;
+
+        /// <summary>
+        /// Provides access to exchange hours and raw data times zones in various markets
+        /// </summary>
+        private readonly MarketHoursDatabase _marketHoursDatabase;
 
         /// <summary>
         /// The file history provider used by the data downloader.
         /// </summary>
-        protected IQFeedFileHistoryProvider _fileHistoryProvider => _fileHistoryProviderLazy.Value;
+        protected readonly IQFeedFileHistoryProvider _fileHistoryProvider;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class.
         /// </summary>
         public IQFeedDataDownloader()
         {
-            _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
-            {
-                // Create and connect the IQFeed lookup client
-                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
-                // Establish connection with IQFeed Client
-                lookupClient.Connect();
+            _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
 
-                return new IQFeedFileHistoryProvider(lookupClient, new IQFeedDataQueueUniverseProvider(), MarketHoursDatabase.FromDataFolder());
-            });
+            _dataQueueUniverseProvider = new IQFeedDataQueueUniverseProvider();
+
+            var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
+
+            lookupClient.Connect();
+
+            _fileHistoryProvider = new IQFeedFileHistoryProvider(lookupClient, _dataQueueUniverseProvider, MarketHoursDatabase.FromDataFolder());
         }
 
         /// <summary>
@@ -75,22 +78,119 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             var endUtc = dataDownloaderGetParameters.EndUtc;
             var tickType = dataDownloaderGetParameters.TickType;
 
+            var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
+            var dataTimeZone = _marketHoursDatabase.GetDataTimeZone(symbol.ID.Market, symbol, symbol.SecurityType);
+
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 
-            return _fileHistoryProvider.ProcessHistoryRequests(
-                new HistoryRequest(
+            Logging.Log.Trace($"IS Symbol Cannonical? {symbol} = {symbol.IsCanonical()}");
+
+            if (symbol.IsCanonical())
+            {
+                return GetCanonicalOptionHistory(
+                    symbol,
                     startUtc,
                     endUtc,
                     dataType,
-                    symbol,
                     resolution,
-                    SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
-                    TimeZones.NewYork,
-                    resolution,
-                    true,
-                    false,
-                    DataNormalizationMode.Adjusted,
-                    tickType));
+                    exchangeHours,
+                    dataTimeZone,
+                    dataDownloaderGetParameters.TickType);
+            }
+            else
+            {
+                return _fileHistoryProvider.ProcessHistoryRequests(
+                    new HistoryRequest(
+                        startUtc,
+                        endUtc,
+                        dataType,
+                        symbol,
+                        resolution,
+                        exchangeHours,
+                        dataTimeZone,
+                        resolution,
+                        true,
+                        false,
+                        DataNormalizationMode.Adjusted,
+                        tickType));
+            }
+        }
+
+        /// <summary>
+        /// Retrieves historical data for all available option contracts derived from a given canonical option symbol
+        /// within the specified date range and resolution.
+        /// </summary>
+        /// <param name="symbol">The canonical option <see cref="Symbol"/> used to derive individual contracts.</param>
+        /// <param name="startUtc">The UTC start time for the historical data request.</param>
+        /// <param name="endUtc">The UTC end time for the historical data request.</param>
+        /// <param name="dataType">The type of data to retrieve (e.g., <see cref="TradeBar"/>, <see cref="QuoteBar"/>, <see cref="Tick"/>).</param>
+        /// <param name="resolution">The resolution of the historical data (e.g., Minute, Hour, Daily).</param>
+        /// <param name="exchangeHours">The exchange hours of the underlying security.</param>
+        /// <param name="dataTimeZone">The time zone in which the data timestamps are represented.</param>
+        /// <param name="tickType">The tick type of data to retrieve (e.g., Trade, Quote).</param>
+        /// <returns>
+        /// A collection of <see cref="BaseData"/> representing historical option data, or <c>null</c> if no data was found.
+        /// </returns>
+        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
+            Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
+        {
+            var blockingOptionCollection = new BlockingCollection<BaseData>();
+            var symbols = GetOptions(symbol, startUtc, endUtc);
+
+            // Symbol can have a lot of Option parameters
+            Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
+            {
+                var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
+                    resolution, true, false, DataNormalizationMode.Raw, tickType);
+
+                var history = _fileHistoryProvider.ProcessHistoryRequests(historyRequest);
+
+                // If history is null, it indicates an incorrect or missing request for historical data,
+                // so we skip processing for this symbol and move to the next one.
+                if (history == null)
+                {
+                    return;
+                }
+
+                foreach (var data in history)
+                {
+                    blockingOptionCollection.Add(data);
+                }
+            })).ContinueWith(_ =>
+            {
+                blockingOptionCollection.CompleteAdding();
+            });
+
+            var options = blockingOptionCollection.GetConsumingEnumerable();
+
+            // Validate if the collection contains at least one successful response from history.
+            if (!options.Any())
+            {
+                return null;
+            }
+
+            return options;
+        }
+
+        /// <summary>
+        /// Retrieves a distinct set of option symbols for the specified underlying symbol
+        /// within the given date range, limited to tradeable days as defined by the market hours database.
+        /// </summary>
+        /// <param name="symbol">The canonical symbol representing the underlying security.</param>
+        /// <param name="startUtc">The UTC start date of the lookup period.</param>
+        /// <param name="endUtc">The UTC end date of the lookup period.</param>
+        /// <returns>
+        /// An enumerable collection of unique option <see cref="Symbol"/> instances
+        /// that match the specified underlying symbol over the specified date range.
+        /// </returns>
+        protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
+        {
+            var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
+
+            return QuantConnect.Time.EachTradeableDay(exchangeHours, startUtc.Date, endUtc.Date)
+                .Select(date => _dataQueueUniverseProvider.LookupSymbols(symbol, default, default))
+                .SelectMany(x => x)
+                .Distinct();
         }
     }
 }
