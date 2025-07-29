@@ -30,8 +30,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
     {
         private IQFeedDataProvider _historyProvider;
 
-        [SetUp]
-        public void SetUp()
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
         {
             _historyProvider = new IQFeedDataProvider();
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null, null));
@@ -61,13 +61,21 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
                 yield return new TestCaseData(AAPL, Resolution.Hour, TickType.Quote, TimeSpan.FromDays(180), true);
                 yield return new TestCaseData(AAPL, Resolution.Daily, TickType.Quote, TimeSpan.FromDays(365), true);
 
-                // TickType.OpenInterest is not maintained
-                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.OpenInterest, TimeSpan.FromMinutes(5), true);
+                // Future
+                var nasdaq100EMini = Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19));
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(180), false);
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(180), false);
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(10), false);
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Second, TickType.Trade, TimeSpan.FromMinutes(10), false);
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), false);
+
+                yield return new TestCaseData(AAPL, Resolution.Tick, TickType.OpenInterest, TimeSpan.FromMinutes(5), true).SetDescription("TickType.OpenInterest is not maintained");
 
                 // Not supported Security Types
                 yield return new TestCaseData(Symbol.Create("SPX.XO", SecurityType.Index, Market.CBOE), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true);
-                yield return new TestCaseData(Symbol.CreateFuture("@ESGH24", Market.CME, new DateTime(2024, 3, 21)), Resolution.Tick, TickType.Trade, TimeSpan.FromMinutes(5), true);
 
+                var naturalGasAug2025 = Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27));
+                yield return new TestCaseData(naturalGasAug2025, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(100), false);
             }
         }
 
@@ -99,7 +107,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
                 case (Resolution.Tick, TickType.Trade):
                     Assert.IsTrue(historyResponse.Any(x => x.Ticks.Any(xx => xx.Value.Count > 0 && xx.Value.Any(t => t.TickType == TickType.Trade))));
                     break;
-            };
+            }
         }
 
         internal static void AssertHistoricalDataResponse(Resolution resolution, List<BaseData> historyResponse)
@@ -126,7 +134,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = new DateTime(2024, 01, 22, 12, 0, 0);
+            var end = DateTime.UtcNow.Date;
 
             if (resolution == Resolution.Daily)
             {

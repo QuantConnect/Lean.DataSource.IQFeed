@@ -67,11 +67,26 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         // Prioritized list of exchanges used to find right futures contract
         public static readonly Dictionary<string, string> FuturesExchanges = new Dictionary<string, string>
         {
-            { "CME", Market.Globex },
+            { "CBOT_GBX", Market.CBOT },
+            { "CBOTMINI", Market.CBOT },
+            { "CFE", Market.CFE },
+            { "CME_GBX", Market.Globex },
+            { "CMEMINI", Market.CME },
+            { "COMEX_GBX", Market.COMEX },
+            { "EUREX", Market.EUREX },
+            { "ICEEA", Market.ICE }, // ICE Futures Europe - included in both Commodities/Financials packages
+            { "ICEEC", Market.ICE }, // ICE Futures Europe - Commodities
+            { "ICEEF", Market.ICE }, // ICE Futures Europe - Financials
+            { "ICEENDEX", Market.ICE }, // ICE Endex
+            { "ICEFANG", Market.ICE }, // ICE FANG Futures
+            { "ICEFC", Market.ICE }, // ICE Futures Canada
+            { "ICEFU", Market.ICE }, // ICE Futures US
+            { "NYMEX_GBX", Market.NYMEX }, // Nymex Globex Contracts
+            { "NYMEXMINI", Market.NYMEX }, // NYMEX Mini Contracts
+            { "SGX", Market.SGX }, // Singapore International Monetary Exchange
+            { "CME", Market.CME },
             { "NYMEX", Market.NYMEX },
             { "CBOT", Market.CBOT },
-            { "ICEFU", Market.ICE },
-            { "CFE", Market.CFE }
         };
 
         // futures fundamental data resolver
@@ -386,7 +401,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         if (columns[columnSymbol].EndsWith("#") || columns[columnSymbol].EndsWith("#C") || columns[columnSymbol].EndsWith("$$"))
                             continue;
 
-                        var futuresTicker = NormalizeFuturesTicker(columns[columnExchange], columns[columnSymbol]);
+                        var futuresTicker = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
 
                         var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
                         var underlyingString = parsed.Underlying;
@@ -410,7 +425,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             }
                         }
 
-                        var market = GetFutureMarket(underlyingString, columns[columnExchange]);
+                        var market = GetFutureMarket(underlyingString, columns[columnListedMarket]);
 
                         if (TryParseFutureSymbol(futuresTicker, out var leanFutureSymbol))
                         {
@@ -536,7 +551,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             continue;
                         }
 
-                        var futuresTicker = NormalizeFuturesTicker(columns[columnExchange], columns[columnSymbol]);
+                        var futuresTicker = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
 
                         var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
                         var underlyingString = parsed.Underlying;
@@ -549,7 +564,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             continue;
                         }
 
-                        var market = GetFutureMarket(underlyingString, columns[columnExchange]);
+                        var market = GetFutureMarket(underlyingString, columns[columnListedMarket]);
                         // Futures contracts have different idiosyncratic expiration dates that IQFeed symbol universe file doesn't contain
                         // We request IQFeed explicitly for the exact expiration data of each contract
 
@@ -736,8 +751,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         {
             return exchange switch
             {
-                "COMEX" or "NYMEX" => symbol.TrimStart('Q'),
-                "CBOT" or "CME" => symbol.TrimStart('@'),
+                "COMEX" or "NYMEX" or "NYMEXMINI" or "NYMEX_GBX" => symbol.TrimStart('Q'),
+                "CBOT" or "CBOT_GBX" or "CBOTMINI" or "CME" or "CMEMINI" or "COMEX_GBX" => symbol.TrimStart('@'),
                 _ => symbol.TrimStart('@') // Legacy fallback: default handling for unknown exchanges
             };
         }
