@@ -20,8 +20,8 @@ using QuantConnect.Data;
 using QuantConnect.Util;
 using QuantConnect.Tests;
 using QuantConnect.Securities;
-using System.Collections.Generic;
 using QuantConnect.Data.Market;
+using System.Collections.Generic;
 
 namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
@@ -140,11 +140,16 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
             {
                 end = end.Date.AddDays(1);
             }
-            var dataType = LeanData.GetDataType(resolution, tickType);
 
-            return new HistoryRequest(end.Subtract(period),
-                end,
-                dataType,
+            return CreateHistoryRequest(symbol, resolution, tickType, end.Subtract(period), end);
+        }
+
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateTimeUtc, DateTime endDateTimeUtc)
+        {
+            return new HistoryRequest(
+                startDateTimeUtc,
+                endDateTimeUtc,
+                LeanData.GetDataType(resolution, tickType),
                 symbol,
                 resolution,
                 SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
