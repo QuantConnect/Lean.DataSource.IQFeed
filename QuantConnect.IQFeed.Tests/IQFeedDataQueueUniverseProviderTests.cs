@@ -39,8 +39,8 @@ public class IQFeedDataQueueUniverseProviderTests
     {
         get
         {
-            yield return new TestCaseData(Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27)));
-            yield return new TestCaseData(Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19)));
+            yield return new TestCaseData(Symbol.Create(Futures.Energy.NaturalGas, SecurityType.Future, Market.NYMEX));
+            yield return new TestCaseData(Symbol.Create(Futures.Indices.NASDAQ100EMini, SecurityType.Future, Market.CME));
             yield return new TestCaseData(Symbol.CreateCanonicalOption(Symbols.AAPL));
             yield return new TestCaseData(Symbol.CreateCanonicalOption(Symbols.SPY));
         }
@@ -51,5 +51,7 @@ public class IQFeedDataQueueUniverseProviderTests
     {
         var symbols = _iQFeedDataProvider.LookupSymbols(symbol, true, default).ToList();
         Assert.IsNotEmpty(symbols);
+        Assert.Greater(symbols.Count, 1);
+        Assert.AreEqual(symbols.Count, symbols.Distinct().Count());
     }
 }
