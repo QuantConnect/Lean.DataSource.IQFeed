@@ -94,8 +94,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             var dataType = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
 
-            Logging.Log.Trace($"IS Symbol Cannonical? {symbol} = {symbol.IsCanonical()}");
-
             if (symbol.IsCanonical())
             {
                 return GetCanonicalOptionHistory(
