@@ -96,7 +96,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             if (symbol.IsCanonical())
             {
-                return GetCanonicalOptionHistory(
+                return GetCanonicalSymbolHistory(
                     symbol,
                     startUtc,
                     endUtc,
@@ -126,25 +126,26 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         }
 
         /// <summary>
-        /// Retrieves historical data for all available option contracts derived from a given canonical option symbol
-        /// within the specified date range and resolution.
+        /// Retrieves historical data for all individual tradeable contracts derived from a given canonical symbol
+        /// (such as options, futures, or other security types) within the specified date range, resolution, and tick type.
         /// </summary>
-        /// <param name="symbol">The canonical option <see cref="Symbol"/> used to derive individual contracts.</param>
-        /// <param name="startUtc">The UTC start time for the historical data request.</param>
-        /// <param name="endUtc">The UTC end time for the historical data request.</param>
-        /// <param name="dataType">The type of data to retrieve (e.g., <see cref="TradeBar"/>, <see cref="QuoteBar"/>, <see cref="Tick"/>).</param>
+        /// <param name="symbol">The canonical <see cref="Symbol"/> representing the underlying security group (option chain, future chain, etc.).</param>
+        /// <param name="startUtc">The UTC start time of the historical data request.</param>
+        /// <param name="endUtc">The UTC end time of the historical data request.</param>
+        /// <param name="dataType">The type of data to retrieve, such as <see cref="TradeBar"/>, <see cref="QuoteBar"/>, or <see cref="Tick"/>.</param>
         /// <param name="resolution">The resolution of the historical data (e.g., Minute, Hour, Daily).</param>
-        /// <param name="exchangeHours">The exchange hours of the underlying security.</param>
-        /// <param name="dataTimeZone">The time zone in which the data timestamps are represented.</param>
-        /// <param name="tickType">The tick type of data to retrieve (e.g., Trade, Quote).</param>
+        /// <param name="exchangeHours">The exchange hours for the underlying security to correctly filter trading times.</param>
+        /// <param name="dataTimeZone">The time zone for the timestamps in the returned data.</param>
+        /// <param name="tickType">The tick type to retrieve, such as Trade or Quote ticks.</param>
         /// <returns>
-        /// A collection of <see cref="BaseData"/> representing historical option data, or <c>null</c> if no data was found.
+        /// An enumerable collection of <see cref="BaseData"/> instances representing historical data for all tradeable contracts
+        /// derived from the canonical symbol within the requested date range. Returns <c>null</c> if no data was found.
         /// </returns>
-        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
+        private IEnumerable<BaseData>? GetCanonicalSymbolHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
             Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
         {
-            var blockingOptionCollection = new BlockingCollection<BaseData>();
-            var symbols = GetOptions(symbol, startUtc, endUtc);
+            var blockingCollection = new BlockingCollection<BaseData>();
+            var symbols = GetCanonicalSymbolChain(symbol, startUtc, endUtc);
 
             // Symbol can have a lot of Option parameters
             Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
@@ -163,14 +164,14 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
                 foreach (var data in history)
                 {
-                    blockingOptionCollection.Add(data);
+                    blockingCollection.Add(data);
                 }
             })).ContinueWith(_ =>
             {
-                blockingOptionCollection.CompleteAdding();
+                blockingCollection.CompleteAdding();
             });
 
-            var options = blockingOptionCollection.GetConsumingEnumerable();
+            var options = blockingCollection.GetConsumingEnumerable();
 
             // Validate if the collection contains at least one successful response from history.
             if (!options.Any())
@@ -182,17 +183,19 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         }
 
         /// <summary>
-        /// Retrieves a distinct set of option symbols for the specified underlying symbol
-        /// within the given date range, limited to tradeable days as defined by the market hours database.
+        /// Retrieves a distinct set of tradeable option symbols for the specified underlying security
+        /// within the given date range, filtered to trading days as defined by the market hours database.
+        /// This includes all option types such as equity options, futures options, index options, and more,
+        /// that are available for trading on those dates.
         /// </summary>
-        /// <param name="symbol">The canonical symbol representing the underlying security.</param>
+        /// <param name="symbol">The canonical symbol representing the underlying security (e.g., equity, future, or index).</param>
         /// <param name="startUtc">The UTC start date of the lookup period.</param>
         /// <param name="endUtc">The UTC end date of the lookup period.</param>
         /// <returns>
-        /// An enumerable collection of unique option <see cref="Symbol"/> instances
-        /// that match the specified underlying symbol over the specified date range.
+        /// An enumerable collection of unique <see cref="Symbol"/> instances representing tradeable options
+        /// for the specified underlying symbol over the specified date range.
         /// </returns>
-        protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
+        protected virtual IEnumerable<Symbol> GetCanonicalSymbolChain(Symbol symbol, DateTime startUtc, DateTime endUtc)
         {
             var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
 
