@@ -45,9 +45,17 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private readonly MarketHoursDatabase _marketHoursDatabase;
 
         /// <summary>
+        /// Lazy initialization for the IQFeed file history provider.
+        /// </summary>
+        /// <remarks>
+        /// This lazy initialization is used to provide deferred creation of the <see cref="IQFeedFileHistoryProvider"/>.
+        /// </remarks>
+        private Lazy<IQFeedFileHistoryProvider> _fileHistoryProviderLazy;
+
+        /// <summary>
         /// The file history provider used by the data downloader.
         /// </summary>
-        protected readonly IQFeedFileHistoryProvider _fileHistoryProvider;
+        protected IQFeedFileHistoryProvider _fileHistoryProvider => _fileHistoryProviderLazy.Value;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="IQFeedDataDownloader"/> class.
@@ -55,14 +63,17 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         public IQFeedDataDownloader()
         {
             _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
-
             _dataQueueUniverseProvider = new IQFeedDataQueueUniverseProvider();
 
-            var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
+            _fileHistoryProviderLazy = new Lazy<IQFeedFileHistoryProvider>(() =>
+            {
+                // Create and connect the IQFeed lookup client
+                var lookupClient = LookupClientFactory.CreateNew(Config.Get("iqfeed-host", "127.0.0.1"), IQSocket.GetPort(PortType.Lookup), NumberOfClients, LookupDefault.Timeout);
+                // Establish connection with IQFeed Client
+                lookupClient.Connect();
 
-            lookupClient.Connect();
-
-            _fileHistoryProvider = new IQFeedFileHistoryProvider(lookupClient, _dataQueueUniverseProvider, MarketHoursDatabase.FromDataFolder());
+                return new IQFeedFileHistoryProvider(lookupClient, _dataQueueUniverseProvider, MarketHoursDatabase.FromDataFolder());
+            });
         }
 
         /// <summary>
