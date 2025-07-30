@@ -103,5 +103,13 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
             Assert.AreEqual(brokerageSymbol, actualBrokerageSymbol);
             Assert.AreEqual(leanSymbol, actualLeanSymbol);
         }
+
+        [TestCase("NYMEX_GBX", "QQA", "QA")]
+        [TestCase("NYMEX_GBX", "QQAN25", "QAN25")]
+        public void NormalizeFuturesTickerRemovesFirstQForNymexGbxExchange(string exchange, string brokerageSymbol, string expectedNormalizedFutureSymbol)
+        {
+            var actualNormalizedFutureSymbol = IQFeedDataQueueUniverseProvider.NormalizeFuturesTicker(exchange, brokerageSymbol);
+            Assert.AreEqual(expectedNormalizedFutureSymbol, actualNormalizedFutureSymbol);
+        }
     }
 }

@@ -22,8 +22,11 @@ using System.Globalization;
 using QuantConnect.Interfaces;
 using QuantConnect.Brokerages;
 using QuantConnect.Securities;
+using System.Runtime.CompilerServices;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Transport;
+
+[assembly: InternalsVisibleTo("QuantConnect.Lean.DataSource.IQFeed.Tests")]
 
 namespace QuantConnect.Lean.DataSource.IQFeed
 {
@@ -747,17 +750,22 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <param name="symbol">The raw symbol from the data feed.</param>
         /// <returns>The normalized symbol with the exchange-specific prefix removed.</returns>
         /// <remarks>
-        /// NYMEX and COMEX adopted the 'Q' prefix, whereas CBOT and CME use '@' to represent electronic contracts.
-        /// For unknown exchanges, '@' is removed by default to preserve legacy behavior.
+        /// NYMEX, COMEX, NYMEXMINI, and NYMEX_GBX adopted the 'Q' prefix, which is removed explicitly.
+        /// Exchanges such as CBOT, CBOT_GBX, CBOTMINI, CME, CMEMINI, and COMEX_GBX typically use the '@' 
+        /// prefix to denote electronic contracts. This '@' is removed by default in the fallback case.
         /// </remarks>
-        private static string NormalizeFuturesTicker(string exchange, string symbol)
+        internal static string NormalizeFuturesTicker(string exchange, string symbol)
         {
-            return exchange switch
+            switch (exchange)
             {
-                "COMEX" or "NYMEX" or "NYMEXMINI" or "NYMEX_GBX" => symbol.TrimStart('Q'),
-                "CBOT" or "CBOT_GBX" or "CBOTMINI" or "CME" or "CMEMINI" or "COMEX_GBX" => symbol.TrimStart('@'),
-                _ => symbol.TrimStart('@') // Legacy fallback: default handling for unknown exchanges
-            };
+                case "COMEX":
+                case "NYMEX":
+                case "NYMEXMINI":
+                case "NYMEX_GBX":
+                    return symbol[1..];
+                default:
+                    return symbol[0] == '@' ? symbol[1..] : symbol;
+            }
         }
 
         /// <summary>
