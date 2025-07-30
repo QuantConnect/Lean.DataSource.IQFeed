@@ -283,7 +283,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             if (mapExists)
             {
                 Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Loading IQFeed futures symbol map file...");
-                _iqFeedNameMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText(iqfeedNameMapFullName));
+                _iqFeedNameMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText(iqfeedNameMapFullName)) ?? [];
             }
 
             if (!universeExists)
@@ -397,37 +397,40 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
                     case "FUTURE":
 
-                        // we are not interested in designated continuous contracts
-                        if (columns[columnSymbol].EndsWith("#") || columns[columnSymbol].EndsWith("#C") || columns[columnSymbol].EndsWith("$$"))
-                            continue;
-
-                        var futuresTicker = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
-
-                        var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
-                        var underlyingString = parsed.Underlying;
-
-                        if (_iqFeedNameMap.TryGetValue(underlyingString, out var underlying))
-                            underlyingString = underlying;
-                        else
+                        // Exclude non-standard contracts such as:
+                        // - Continuous contracts (e.g., @BO# or @BO#C)
+                        // - Synthetic or spot instruments (e.g., CVUY$$)
+                        // These are not standard, tradable futures and are not supported by Lean
+                        if (columns[columnSymbol].EndsWith('#')
+                            || columns[columnSymbol].EndsWith("#C", StringComparison.InvariantCultureIgnoreCase)
+                            || columns[columnSymbol].EndsWith("$$", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (!mapExists)
+                            continue;
+                        }
+
+                        var normalizedFutureBrokerageSymbol = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
+
+                        var underlyingBrokerageTicker = SymbolRepresentation.ParseFutureTicker(normalizedFutureBrokerageSymbol).Underlying;
+
+                        if (_iqFeedNameMap.TryGetValue(underlyingBrokerageTicker, out var underlyingLeanTicker))
+                        {
+                            normalizedFutureBrokerageSymbol = normalizedFutureBrokerageSymbol.Replace(underlyingBrokerageTicker, underlyingLeanTicker);
+                            underlyingBrokerageTicker = underlyingLeanTicker;
+                        }
+                        else if (!mapExists && !_iqFeedNameMap.ContainsKey(underlyingBrokerageTicker))
+                        {
+                            // if map is not created yet, we request this information from IQFeed
+                            var exchangeSymbol = _symbolFundamentalData.Request(columns[columnSymbol]).Item2;
+                            if (!string.IsNullOrEmpty(exchangeSymbol))
                             {
-                                if (!_iqFeedNameMap.ContainsKey(underlyingString))
-                                {
-                                    // if map is not created yet, we request this information from IQFeed
-                                    var exchangeSymbol = _symbolFundamentalData.Request(columns[columnSymbol]).Item2;
-                                    if (!string.IsNullOrEmpty(exchangeSymbol))
-                                    {
-                                        _iqFeedNameMap[underlyingString] = exchangeSymbol;
-                                        underlyingString = exchangeSymbol;
-                                    }
-                                }
+                                _iqFeedNameMap[underlyingBrokerageTicker] = exchangeSymbol;
+                                underlyingBrokerageTicker = exchangeSymbol;
                             }
                         }
 
-                        var market = GetFutureMarket(underlyingString, columns[columnListedMarket]);
+                        var market = GetFutureMarket(underlyingBrokerageTicker, columns[columnListedMarket]);
 
-                        if (TryParseFutureSymbol(futuresTicker, out var leanFutureSymbol))
+                        if (TryParseFutureSymbol(normalizedFutureBrokerageSymbol, out var leanFutureSymbol))
                         {
                             var placeholderSymbolData = new SymbolData
                             {
@@ -445,7 +448,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             }
                         }
 
-                        canonicalSymbol = Symbol.Create(underlyingString, SecurityType.Future, market);
+                        canonicalSymbol = Symbol.Create(underlyingBrokerageTicker, SecurityType.Future, market);
 
                         if (symbolCache.TryGetValue(canonicalSymbol, out var symbolData))
                         {

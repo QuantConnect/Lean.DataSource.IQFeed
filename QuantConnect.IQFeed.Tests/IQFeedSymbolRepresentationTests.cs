@@ -86,6 +86,12 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
             yield return new TestCaseData("QBZG26", Symbol.CreateFuture(Futures.Energy.BrentLastDayFinancial, Market.NYMEX, new DateTime(2025, 12, 31)));
 
             yield return new TestCaseData("@NQU25", Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19)));
+
+            yield return new TestCaseData("@ADU25", Symbol.CreateFuture(Futures.Currencies.AUD, Market.CME, new DateTime(2025, 09, 15)))
+                .SetDescription("IQFeed returns 'AD' for Australian Dollar; Lean expects '6A'. Verifies symbol mapping from 'IQFeed-symbol-map.json'.");
+
+            yield return new TestCaseData("@BOU25", Symbol.CreateFuture(Futures.Grains.SoybeanOil, Market.CBOT, new DateTime(2025, 09, 12)))
+                .SetDescription("Brokerage uses 'BO' for Soybean Oil; Lean maps it as 'ZL'. Validates symbol translation via 'IQFeed-symbol-map.json'.");
         }
 
         [TestCaseSource(nameof(GetFutureSymbolsTestCases))]
