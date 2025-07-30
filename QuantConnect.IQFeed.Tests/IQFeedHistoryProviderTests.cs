@@ -76,6 +76,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 
                 var naturalGasAug2025 = Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27));
                 yield return new TestCaseData(naturalGasAug2025, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(100), false);
+
+                yield return new TestCaseData(Symbol.CreateCanonicalOption(Symbols.AAPL), default, default, default, true).SetDescription("Canonical symbol requests are unsupported and return null.");
             }
         }
 
