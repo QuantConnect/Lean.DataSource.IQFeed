@@ -17,6 +17,7 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using QuantConnect.Tests;
 using QuantConnect.Interfaces;
 using QuantConnect.Securities;
 using System.Collections.Generic;
@@ -40,6 +41,8 @@ public class IQFeedDataQueueUniverseProviderTests
         {
             yield return new TestCaseData(Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27)));
             yield return new TestCaseData(Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19)));
+            yield return new TestCaseData(Symbol.CreateCanonicalOption(Symbols.AAPL));
+            yield return new TestCaseData(Symbol.CreateCanonicalOption(Symbols.SPY));
         }
     }
 
