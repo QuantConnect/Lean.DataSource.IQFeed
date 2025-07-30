@@ -79,13 +79,15 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
         [TestCaseSource(nameof(CanonicalFutureSymbolTestCases))]
         public void DownloadCanonicalFutureHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateUtc, DateTime endDateUtc)
         {
-            var request = IQFeedHistoryProviderTests.CreateHistoryRequest(symbol, resolution, tickType, startDateUtc, endDateUtc);
-
-            var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
+            var parameters = new DataDownloaderGetParameters(symbol, resolution, startDateUtc, endDateUtc, tickType);
             var downloadResponse = _downloader.Get(parameters)?.ToList();
 
             Assert.IsNotNull(downloadResponse);
             Assert.IsNotEmpty(downloadResponse);
+
+            var uniqueFutureSymbols = downloadResponse.Select(x => x.Symbol).Distinct().ToList();
+
+            Assert.That(uniqueFutureSymbols.Count, Is.GreaterThan(1), $"Expected more than 1 unique future symbol, but got {uniqueFutureSymbols.Count}: {string.Join(", ", uniqueFutureSymbols)}");
         }
     }
 }
