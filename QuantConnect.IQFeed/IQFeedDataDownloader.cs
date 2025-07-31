@@ -171,15 +171,15 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 blockingCollection.CompleteAdding();
             });
 
-            var options = blockingCollection.GetConsumingEnumerable();
+            var historyResponses = blockingCollection.GetConsumingEnumerable();
 
             // Validate if the collection contains at least one successful response from history.
-            if (!options.Any())
+            if (!historyResponses.Any())
             {
                 return null;
             }
 
-            return options;
+            return historyResponses;
         }
 
         /// <summary>
