@@ -65,8 +65,16 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
     public class LookupIntervalEventArgs : LookupEventArgs
     {
-        public LookupIntervalEventArgs(string requestId, string line) :
-            base(requestId, LookupType.REQ_HST_INT, LookupSequence.MessageDetail)
+        public DateTime DateTimeStamp { get; }
+        public decimal High { get; }
+        public decimal Low { get; }
+        public decimal Open { get; }
+        public decimal Close { get; }
+        public int TotalVolume { get; }
+        public int PeriodVolume { get; }
+
+        public LookupIntervalEventArgs(string requestId, string line)
+            : base(requestId, LookupType.REQ_HST_INT, LookupSequence.MessageDetail)
         {
             var fields = line.Split(',');
             if (fields.Length < 8)
@@ -74,32 +82,15 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 Log.Error("LookupIntervalEventArgs.ctor(): " + line);
                 return;
             }
-            if (!DateTime.TryParseExact(fields[1], "yyyy-MM-dd HH:mm:ss", _enUS, DateTimeStyles.None, out _dateTimeStamp)) _dateTimeStamp = DateTime.MinValue;
-            if (!double.TryParse(fields[2], out _high)) _high = 0;
-            if (!double.TryParse(fields[3], out _low)) _low = 0;
-            if (!double.TryParse(fields[4], out _open)) _open = 0;
-            if (!double.TryParse(fields[5], out _close)) _close = 0;
-            if (!int.TryParse(fields[6], out _totalVolume)) _totalVolume = 0;
-            if (!int.TryParse(fields[7], out _periodVolume)) _periodVolume = 0;
-        }
-        public DateTime DateTimeStamp { get { return _dateTimeStamp; } }
-        public double High { get { return _high; } }
-        public double Low { get { return _low; } }
-        public double Open { get { return _open; } }
-        public double Close { get { return _close; } }
-        public int TotalVolume { get { return _totalVolume; } }
-        public int PeriodVolume { get { return _periodVolume; } }
 
-        #region private
-        private DateTime _dateTimeStamp;
-        private double _high;
-        private double _low;
-        private double _open;
-        private double _close;
-        private int _totalVolume;
-        private int _periodVolume;
-        private CultureInfo _enUS = new CultureInfo("en-US");
-        #endregion
+            DateTimeStamp = DateTime.TryParseExact(fields[1], "yyyy-MM-dd HH:mm:ss", new CultureInfo("en-US"), DateTimeStyles.None, out var dateTimeStamp) ? dateTimeStamp : default;
+            High = decimal.TryParse(fields[2], out var h) ? h : 0m;
+            Low = decimal.TryParse(fields[3], out var l) ? l : 0m;
+            Open = decimal.TryParse(fields[4], out var o) ? o : 0m;
+            Close = decimal.TryParse(fields[5], out var c) ? c : 0m;
+            TotalVolume = int.TryParse(fields[6], out var t) ? t : 0;
+            PeriodVolume = int.TryParse(fields[7], out var p) ? p : 0;
+        }
     }
 
     public class LookupDayWeekMonthEventArgs : LookupEventArgs
