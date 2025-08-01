@@ -32,6 +32,8 @@ using QuantConnect.Configuration;
 using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
+using QuantConnect.Lean.Engine.DataFeeds;
+using QuantConnect.Lean.Engine.HistoricalData;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
 namespace QuantConnect.Lean.DataSource.IQFeed
@@ -39,7 +41,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     /// <summary>
     /// IQFeedDataProvider is an implementation of IDataQueueHandler and IHistoryProvider
     /// </summary>
-    public class IQFeedDataProvider : HistoryProviderBase, IDataQueueHandler, IDataQueueUniverseProvider
+    public class IQFeedDataProvider : SynchronizingHistoryProvider, IDataQueueHandler, IDataQueueUniverseProvider
     {
         private bool _isConnected;
         private readonly HashSet<Symbol> _symbols;
@@ -234,7 +236,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
         public override IEnumerable<Slice>? GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
         {
-            var subscriptions = new List<IEnumerable<Slice>>();
+            var subscriptions = new List<Subscription>();
             foreach (var request in requests)
             {
                 var history = _historyPort.ProcessHistoryRequests(request, sliceTimeZone);
@@ -244,7 +246,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     continue;
                 }
 
-                subscriptions.Add(history);
+                var subscription = CreateSubscription(request, history);
+                subscriptions.Add(subscription);
             }
 
             if (subscriptions.Count == 0)
@@ -252,7 +255,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 return null;
             }
 
-            return subscriptions.SelectMany(x => x);
+            return CreateSliceEnumerableFromSubscriptions(subscriptions, sliceTimeZone);
         }
 
         /// <summary>
@@ -725,7 +728,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     // this type is expected to be used for exactly one job at a time
     public class HistoryPort : IQLookupHistorySymbolClient
     {
-        private bool _inProgress;
+        private AutoResetEvent _historyRequestResetEvent = new(false);
         private readonly ConcurrentDictionary<string, HistoryRequest> _requestDataByRequestId = [];
         private ConcurrentDictionary<string, List<BaseData>> _currentRequest;
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
@@ -773,7 +776,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns> An enumerable sequence of <see cref="Slice"/> objects representing the historical data for the request,
         /// or <c>null</c> if no data could be retrieved or processed.
         /// </returns>
-        public IEnumerable<Slice>? ProcessHistoryRequests(HistoryRequest request, DateTimeZone sliceTimeZone)
+        public IEnumerable<BaseData>? ProcessHistoryRequests(HistoryRequest request, DateTimeZone sliceTimeZone)
         {
             // skipping universe and canonical symbols
             if (!CanHandle(request.Symbol) ||
@@ -807,9 +810,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 }
                 return null;
             }
-
-            // Set this process status
-            _inProgress = true;
 
             var ticker = _symbolUniverse.GetBrokerageSymbol(request.Symbol);
             var start = request.StartTimeUtc.ConvertFromUtc(IQFeedDataProvider.TimeZoneIQFeed);
@@ -846,15 +846,16 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             _requestDataByRequestId[reqid] = request;
 
-            while (_inProgress)
+            if (!_historyRequestResetEvent.WaitOne(TimeSpan.FromSeconds(20)))
             {
-                continue;
+                Log.Trace($"{nameof(IQFeedDataProvider)}.{nameof(ProcessHistoryRequests)}: Timeout waiting for history data. Request details - Symbol: {request.Symbol.Value} ({request.Symbol.SecurityType}), Resolution: {request.Resolution}, StartTimeUtc: {request.StartTimeUtc:u}, EndTimeUtc: {request.EndTimeUtc:u}");
+                return null;
             }
 
             return GetSlice(request.ExchangeHours.TimeZone, sliceTimeZone);
         }
 
-        private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz, DateTimeZone sliceTimeZone)
+        private IEnumerable<BaseData>? GetSlice(DateTimeZone exchangeTz, DateTimeZone sliceTimeZone)
         {
             // After all data arrive, we pass it to the algorithm through memory and write to a file
             foreach (var key in _currentRequest.Keys)
@@ -864,7 +865,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     foreach (var tradeBar in tradeBars)
                     {
                         // Returns IEnumerable<Slice> object
-                        yield return new Slice(tradeBar.EndTime.ConvertTo(exchangeTz, sliceTimeZone), new[] { tradeBar }, tradeBar.EndTime.ConvertToUtc(exchangeTz));
+                        yield return tradeBar;
                     }
                 }
             }
@@ -917,7 +918,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         }
                         break;
                     case LookupSequence.MessageEnd:
-                        _inProgress = false;
+                        _historyRequestResetEvent.Set();
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
