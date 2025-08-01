@@ -606,7 +606,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 }
             }
 
-            return time.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, exchangeTimeZone);
+            return time.ConvertFromUtc(exchangeTimeZone);
         }
 
         private Symbol GetLeanSymbol(string ticker)
