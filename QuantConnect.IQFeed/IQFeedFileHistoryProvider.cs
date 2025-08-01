@@ -156,11 +156,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         var tickFunc = request.TickType == TickType.Trade ? new Func<DateTime, Symbol, TickMessage, Tick>(CreateTradeTick) : CreateQuoteTick;
 
                         if (_filesByRequestKeyCache.TryRemove(requestKey, out filename))
-                            return GetDataFromTickMessages(filename, request, tickFunc, true);
+                            return GetDataFromTickMessages(filename, request.Symbol, tickFunc, true);
 
                         filename = _lookupClient.Historical.File.GetHistoryTickTimeframeAsync(ticker, startDate, endDate, dataDirection: DataDirection.Oldest).SynchronouslyAwaitTaskResult();
                         _filesByRequestKeyCache.AddOrUpdate(requestKey, filename);
-                        return GetDataFromTickMessages(filename, request, tickFunc, false);
+                        return GetDataFromTickMessages(filename, request.Symbol, tickFunc, false);
 
                     case Resolution.Daily:
                         filename = _lookupClient.Historical.File.GetHistoryDailyTimeframeAsync(ticker, startDate, endDate, dataDirection: DataDirection.Oldest).SynchronouslyAwaitTaskResult();
@@ -181,24 +181,23 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         }
 
         /// <summary>
-        /// Stream IQFeed TickMessages from disk to Lean Tick
+        /// Streams IQFeed <see cref="TickMessage"/> data from a file on disk,
+        /// converting each valid tick message into Lean's <see cref="BaseData"/> ticks using the provided conversion function.
         /// </summary>
-        /// <param name="filename"></param>
-        /// <param name="request"></param>
-        /// <param name="tickFunc"></param>
-        /// <param name="delete"></param>
-        /// <returns>Converted Tick</returns>
-        private IEnumerable<BaseData> GetDataFromTickMessages(string filename, HistoryRequest request, Func<DateTime, Symbol, TickMessage, Tick> tickFunc, bool delete)
+        /// <param name="filename">The path to the file containing IQFeed tick messages.</param>
+        /// <param name="symbol">The symbol associated with the ticks being processed.</param>
+        /// <param name="tickFunc">A function to convert each <see cref="TickMessage"/> into a Lean <see cref="Tick"/> object.
+        /// The function receives the tick timestamp, symbol, and original tick message.</param>
+        /// <param name="delete">If <c>true</c>, deletes the source file after processing is complete.</param>
+        /// <returns>An enumerable sequence of <see cref="BaseData"/> ticks converted from the IQFeed tick messages.</returns>
+        private static IEnumerable<BaseData> GetDataFromTickMessages(string filename, Symbol symbol, Func<DateTime, Symbol, TickMessage, Tick> tickFunc, bool delete)
         {
-            var dataTimeZone = _marketHoursDatabase.GetDataTimeZone(request.Symbol.ID.Market, request.Symbol, request.Symbol.SecurityType);
-
             // We need to discard ticks which are not impacting the price, i.e those having BasisForLast = O
             // To get a better understanding how IQFeed is resampling ticks, have a look to this algorithm:
             // https://github.com/mathpaquette/IQFeed.CSharpApiClient/blob/1b33250e057dfd6cd77e5ee35fa16aebfc8fbe79/src/IQFeed.CSharpApiClient.Extensions/Lookup/Historical/Resample/TickMessageExtensions.cs#L41
             foreach (var tick in TickMessage.ParseFromFile(filename).Where(t => t.BasisForLast != 'O'))
             {
-                var timestamp = tick.Timestamp.ConvertTo(TimeZones.NewYork, dataTimeZone);
-                yield return tickFunc(timestamp, request.Symbol, tick);
+                yield return tickFunc(tick.Timestamp, symbol, tick);
             }
 
             if (delete)

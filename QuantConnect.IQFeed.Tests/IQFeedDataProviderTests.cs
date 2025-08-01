@@ -22,6 +22,7 @@ using QuantConnect.Data;
 using QuantConnect.Tests;
 using QuantConnect.Logging;
 using System.Threading.Tasks;
+using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using System.Collections.Generic;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
@@ -52,6 +53,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
                 yield return new TestCaseData(Symbols.AAPL);
                 yield return new TestCaseData(Symbol.Create("SMCI", SecurityType.Equity, Market.USA));
                 yield return new TestCaseData(Symbol.Create("IRBT", SecurityType.Equity, Market.USA));
+                var nasdaq100EMini = Symbol.CreateFuture(Futures.Indices.NASDAQ100EMini, Market.CME, new DateTime(2025, 09, 19));
+                yield return new TestCaseData(nasdaq100EMini);
+                var naturalGasAug2025 = Symbol.CreateFuture(Futures.Energy.NaturalGas, Market.NYMEX, new DateTime(2025, 08, 27));
+                yield return new TestCaseData(naturalGasAug2025);
+
                 // yield return new TestCaseData(Symbols.SPY);
 
                 // Not supported.
@@ -127,19 +133,22 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 
             Action<BaseData> callback = (dataPoint) =>
             {
-                if (dataPoint == null)
+                if (dataPoint is null)
                 {
                     return;
                 }
 
-                switch (dataPoint)
+                if (dataPoint is Tick tick)
                 {
-                    case TradeBar _:
-                        secondDataReceived[typeof(TradeBar)] += 1;
-                        break;
-                    case QuoteBar _:
-                        secondDataReceived[typeof(QuoteBar)] += 1;
-                        break;
+                    switch (tick.TickType)
+                    {
+                        case TickType.Trade:
+                            secondDataReceived[typeof(TradeBar)] += 1;
+                            break;
+                        case TickType.Quote:
+                            secondDataReceived[typeof(QuoteBar)] += 1;
+                            break;
+                    }
                 }
 
                 if (secondDataReceived.All(type => type.Value >= minimumReturnDataAmount))

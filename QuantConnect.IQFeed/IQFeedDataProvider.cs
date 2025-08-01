@@ -22,17 +22,18 @@ using Newtonsoft.Json;
 using QuantConnect.Api;
 using QuantConnect.Util;
 using QuantConnect.Data;
-using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using QuantConnect.Packets;
 using QuantConnect.Logging;
+using QuantConnect.Securities;
 using QuantConnect.Interfaces;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
-using Timer = System.Timers.Timer;
 using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
+using QuantConnect.Lean.Engine.DataFeeds;
+using QuantConnect.Lean.Engine.HistoricalData;
 using HistoryRequest = QuantConnect.Data.HistoryRequest;
 
 namespace QuantConnect.Lean.DataSource.IQFeed
@@ -40,13 +41,18 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     /// <summary>
     /// IQFeedDataProvider is an implementation of IDataQueueHandler and IHistoryProvider
     /// </summary>
-    public class IQFeedDataProvider : HistoryProviderBase, IDataQueueHandler, IDataQueueUniverseProvider
+    public class IQFeedDataProvider : SynchronizingHistoryProvider, IDataQueueHandler, IDataQueueUniverseProvider
     {
         private bool _isConnected;
         private readonly HashSet<Symbol> _symbols;
         private readonly Dictionary<Symbol, Symbol> _underlyings;
         private readonly object _sync = new object();
         private IQFeedDataQueueUniverseProvider _symbolUniverse;
+
+        /// <summary>
+        /// Represents the time zone used by IQFeed, which returns time in the New York (EST) Time Zone with daylight savings time.
+        /// </summary>
+        public readonly static DateTimeZone TimeZoneIQFeed = TimeZones.NewYork;
 
         //Socket connections:
         private AdminPort _adminPort;
@@ -230,17 +236,18 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
         public override IEnumerable<Slice>? GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
         {
-            var subscriptions = new List<IEnumerable<Slice>>();
+            var subscriptions = new List<Subscription>();
             foreach (var request in requests)
             {
-                var history = _historyPort.ProcessHistoryRequests(request);
+                var history = _historyPort.ProcessHistoryRequests(request, sliceTimeZone);
 
                 if (history == null)
                 {
                     continue;
                 }
 
-                subscriptions.Add(history);
+                var subscription = CreateSubscription(request, history);
+                subscriptions.Add(subscription);
             }
 
             if (subscriptions.Count == 0)
@@ -248,7 +255,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 return null;
             }
 
-            return subscriptions.SelectMany(x => x);
+            return CreateSliceEnumerableFromSubscriptions(subscriptions, sliceTimeZone);
         }
 
         /// <summary>
@@ -556,66 +563,53 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     /// </summary>
     public class Level1Port : IQLevel1Client
     {
-        private int count;
-        private DateTime start;
-        private DateTime _feedTime;
-        private Stopwatch _stopwatch = new Stopwatch();
-        private readonly Timer _timer;
         private readonly ConcurrentDictionary<string, double> _prices;
         private readonly ConcurrentDictionary<string, int> _openInterests;
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
         private readonly IDataAggregator _aggregator;
-        private int _dataQueueCount;
 
-        public DateTime FeedTime
-        {
-            get
-            {
-                if (_feedTime == new DateTime()) return DateTime.Now;
-                return _feedTime.AddMilliseconds(_stopwatch.ElapsedMilliseconds);
-            }
-            set
-            {
-                _feedTime = value;
-                _stopwatch = Stopwatch.StartNew();
-            }
-        }
+        /// <summary>
+        /// A thread-safe dictionary that maps a <see cref="Symbol"/> to a <see cref="DateTimeZone"/>.
+        /// </summary>
+        /// <remarks>
+        /// This dictionary is used to store the time zone information for each symbol in a concurrent environment,
+        /// ensuring thread safety when accessing or modifying the time zone data.
+        /// </remarks>
+        private readonly ConcurrentDictionary<Symbol, DateTimeZone> _exchangeTimeZoneByLeanSymbol = new();
 
         public Level1Port(IDataAggregator aggregator, IQFeedDataQueueUniverseProvider symbolUniverse)
             : base(IQFeedDefault.BufferSize)
         {
-            start = DateTime.Now;
             _prices = new ConcurrentDictionary<string, double>();
             _openInterests = new ConcurrentDictionary<string, int>();
 
             _aggregator = aggregator;
             _symbolUniverse = symbolUniverse;
             Level1SummaryUpdateEvent += OnLevel1SummaryUpdateEvent;
-            Level1TimerEvent += OnLevel1TimerEvent;
             Level1ServerDisconnectedEvent += OnLevel1ServerDisconnected;
             Level1ServerReconnectFailed += OnLevel1ServerReconnectFailed;
             Level1UnknownEvent += OnLevel1UnknownEvent;
             Level1FundamentalEvent += OnLevel1FundamentalEvent;
+        }
 
-            _timer = new Timer(1000);
-            _timer.Enabled = false;
-            _timer.AutoReset = true;
-            _timer.Elapsed += (sender, args) =>
+        /// <summary>
+        /// Returns a timestamp for a tick converted to the exchange time zone
+        /// </summary>
+        private DateTime GetRealTimeTickTime(Symbol symbol)
+        {
+            var time = DateTime.UtcNow;
+            var exchangeTimeZone = default(DateTimeZone);
+            lock (_exchangeTimeZoneByLeanSymbol)
             {
-                var ticksPerSecond = count / (DateTime.Now - start).TotalSeconds;
-                int dataQueueCount = Interlocked.Exchange(ref _dataQueueCount, 0);
-                if (ticksPerSecond > 1000 || dataQueueCount > 31)
+                if (!_exchangeTimeZoneByLeanSymbol.TryGetValue(symbol, out exchangeTimeZone))
                 {
-                    Log.Trace($"IQFeed.OnSecond(): Ticks/sec: {ticksPerSecond.ToStringInvariant("0000.00")} " +
-                        $"Engine.Ticks.Count: {dataQueueCount} CPU%: {OS.CpuUsage.ToStringInvariant("0.0") + "%"}"
-                    );
+                    // read the exchange time zone from market-hours-database
+                    exchangeTimeZone = MarketHoursDatabase.FromDataFolder().GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType).TimeZone;
+                    _exchangeTimeZoneByLeanSymbol[symbol] = exchangeTimeZone;
                 }
+            }
 
-                count = 0;
-                start = DateTime.Now;
-            };
-
-            _timer.Enabled = true;
+            return time.ConvertFromUtc(exchangeTimeZone);
         }
 
         private Symbol GetLeanSymbol(string ticker)
@@ -635,7 +629,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 _prices.TryGetValue(e.Symbol, out referencePrice);
 
                 var symbol = GetLeanSymbol(e.Symbol);
-                var split = new Data.Market.Split(symbol, FeedTime, (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
+                var split = new Data.Market.Split(symbol, GetRealTimeTickTime(symbol), (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
                 Emit(split);
             }
         }
@@ -657,29 +651,20 @@ namespace QuantConnect.Lean.DataSource.IQFeed
              && e.TypeOfUpdate != Level1SummaryUpdateEventArgs.UpdateType.Bid
              && e.TypeOfUpdate != Level1SummaryUpdateEventArgs.UpdateType.Ask) return;
 
-            count++;
-            var time = FeedTime;
             var last = (decimal)(e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.ExtendedTrade ? e.ExtendedTradingLast : e.Last);
 
             var symbol = GetLeanSymbol(e.Symbol);
+            var time = GetRealTimeTickTime(symbol);
 
             TickType tradeType;
 
             switch (symbol.ID.SecurityType)
             {
-                // the feed time is in NYC/EDT, convert it into EST
                 case SecurityType.Forex:
-
-                    time = FeedTime.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
                     // TypeOfUpdate always equal to UpdateType.Trade for FXCM, but the message contains B/A and last data
                     tradeType = TickType.Quote;
-
                     break;
-
-                // for all other asset classes we leave it as is (NYC/EDT)
                 default:
-
-                    time = FeedTime;
                     tradeType = e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.Bid ||
                                 e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.Ask ?
                                 TickType.Quote :
@@ -687,7 +672,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     break;
             }
 
-            var tick = new Tick(time, symbol, last, (decimal)e.Bid, (decimal)e.Ask)
+            var tick = new Tick(GetRealTimeTickTime(symbol), symbol, last, (decimal)e.Bid, (decimal)e.Ask)
             {
                 AskSize = e.AskSize,
                 BidSize = e.BidSize,
@@ -713,19 +698,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private void Emit(BaseData tick)
         {
             _aggregator.Update(tick);
-            Interlocked.Increment(ref _dataQueueCount);
-        }
-
-        /// <summary>
-        /// Set the interal clock time.
-        /// </summary>
-        private void OnLevel1TimerEvent(object sender, Level1TimerEventArgs e)
-        {
-            //If there was a bad tick and the time didn't set right, skip setting it here and just use our millisecond timer to set the time from last time it was set.
-            if (e.DateTimeStamp != DateTime.MinValue)
-            {
-                FeedTime = e.DateTimeStamp;
-            }
         }
 
         /// <summary>
@@ -756,8 +728,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     // this type is expected to be used for exactly one job at a time
     public class HistoryPort : IQLookupHistorySymbolClient
     {
-        private bool _inProgress;
-        private ConcurrentDictionary<string, HistoryRequest> _requestDataByRequestId;
+        private AutoResetEvent _historyRequestResetEvent = new(false);
+        private readonly ConcurrentDictionary<string, HistoryRequest> _requestDataByRequestId = [];
         private ConcurrentDictionary<string, List<BaseData>> _currentRequest;
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
 
@@ -783,7 +755,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             : base(IQFeedDefault.BufferSize)
         {
             _symbolUniverse = symbolUniverse;
-            _requestDataByRequestId = new ConcurrentDictionary<string, HistoryRequest>();
             _currentRequest = new ConcurrentDictionary<string, List<BaseData>>();
         }
 
@@ -798,9 +769,14 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         }
 
         /// <summary>
-        /// Populate request data
+        ///  Processes the specified historical data request and generates a sequence of <see cref="Slice"/> instances.
         /// </summary>
-        public IEnumerable<Slice>? ProcessHistoryRequests(HistoryRequest request)
+        /// <param name="request">The historical data requests</param>
+        /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
+        /// <returns> An enumerable sequence of <see cref="Slice"/> objects representing the historical data for the request,
+        /// or <c>null</c> if no data could be retrieved or processed.
+        /// </returns>
+        public IEnumerable<BaseData>? ProcessHistoryRequests(HistoryRequest request, DateTimeZone sliceTimeZone)
         {
             // skipping universe and canonical symbols
             if (!CanHandle(request.Symbol) ||
@@ -835,13 +811,9 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 return null;
             }
 
-            // Set this process status
-            _inProgress = true;
-
             var ticker = _symbolUniverse.GetBrokerageSymbol(request.Symbol);
-            var start = request.StartTimeUtc.ConvertFromUtc(TimeZones.NewYork);
-            DateTime? end = request.EndTimeUtc.ConvertFromUtc(TimeZones.NewYork);
-            var exchangeTz = request.ExchangeHours.TimeZone;
+            var start = request.StartTimeUtc.ConvertFromUtc(IQFeedDataProvider.TimeZoneIQFeed);
+            DateTime? end = request.EndTimeUtc.ConvertFromUtc(IQFeedDataProvider.TimeZoneIQFeed);
             // if we're within a minute of now, don't set the end time
             if (request.EndTimeUtc >= DateTime.UtcNow.AddMinutes(-1))
             {
@@ -874,15 +846,16 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
             _requestDataByRequestId[reqid] = request;
 
-            while (_inProgress)
+            if (!_historyRequestResetEvent.WaitOne(TimeSpan.FromSeconds(20)))
             {
-                continue;
+                Log.Trace($"{nameof(IQFeedDataProvider)}.{nameof(ProcessHistoryRequests)}: Timeout waiting for history data. Request details - Symbol: {request.Symbol.Value} ({request.Symbol.SecurityType}), Resolution: {request.Resolution}, StartTimeUtc: {request.StartTimeUtc:u}, EndTimeUtc: {request.EndTimeUtc:u}");
+                return null;
             }
 
-            return GetSlice(exchangeTz);
+            return GetSlice(request.ExchangeHours.TimeZone, sliceTimeZone);
         }
 
-        private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz)
+        private IEnumerable<BaseData>? GetSlice(DateTimeZone exchangeTz, DateTimeZone sliceTimeZone)
         {
             // After all data arrive, we pass it to the algorithm through memory and write to a file
             foreach (var key in _currentRequest.Keys)
@@ -892,7 +865,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     foreach (var tradeBar in tradeBars)
                     {
                         // Returns IEnumerable<Slice> object
-                        yield return new Slice(tradeBar.EndTime, new[] { tradeBar }, tradeBar.EndTime.ConvertToUtc(exchangeTz));
+                        yield return tradeBar;
                     }
                 }
             }
@@ -939,14 +912,13 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         _currentRequest.AddOrUpdate(e.Id, new List<BaseData>());
                         break;
                     case LookupSequence.MessageDetail:
-                        List<BaseData> current;
-                        if (_currentRequest.TryGetValue(e.Id, out current))
+                        if (_currentRequest.TryGetValue(e.Id, out var current))
                         {
                             HandleMessageDetail(e, current);
                         }
                         break;
                     case LookupSequence.MessageEnd:
-                        _inProgress = false;
+                        _historyRequestResetEvent.Set();
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -965,8 +937,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <param name="current">Current list of BaseData object</param>
         private void HandleMessageDetail(LookupEventArgs e, List<BaseData> current)
         {
-            var requestData = _requestDataByRequestId[e.Id];
-            var data = GetData(e, requestData);
+            var data = GetData(e, _requestDataByRequestId[e.Id]);
             if (data != null && data.Time != DateTime.MinValue)
             {
                 current.Add(data);
@@ -981,54 +952,53 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns>BaseData object</returns>
         private BaseData GetData(LookupEventArgs e, HistoryRequest requestData)
         {
-            var isEquity = requestData.Symbol.SecurityType == SecurityType.Equity;
             try
             {
                 switch (e.Type)
                 {
                     case LookupType.REQ_HST_TCK:
-                        var t = (LookupTickEventArgs)e;
-                        var time = isEquity ? t.DateTimeStamp : t.DateTimeStamp.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
-                        switch (requestData.TickType)
+                        if (e is LookupTickEventArgs t)
                         {
-                            case TickType.Trade:
-                                return new Tick()
-                                {
-                                    Time = time,
-                                    Value = (decimal)t.Last,
-                                    DataType = MarketDataType.Tick,
-                                    Symbol = requestData.Symbol,
-                                    TickType = TickType.Trade,
-                                    Quantity = t.LastSize,
-                                };
-                            case TickType.Quote:
-                                return new Tick()
-                                {
-                                    Time = time,
-                                    DataType = MarketDataType.Tick,
-                                    Symbol = requestData.Symbol,
-                                    TickType = TickType.Quote,
-                                    AskPrice = (decimal)t.Ask,
-                                    //AskSize = askSize,
-                                    BidPrice = (decimal)t.Bid,
-                                    //BidSize = bidSize,
-                                };
-                            default:
-                                throw new NotImplementedException($"The TickType '{requestData.TickType}' is not supported in the {nameof(GetData)} method. Please implement the necessary logic for handling this TickType.");
-                        }
-                    case LookupType.REQ_HST_INT:
-                        var i = (LookupIntervalEventArgs)e;
-                        if (i.DateTimeStamp == DateTime.MinValue) return null;
-                        var istartTime = i.DateTimeStamp - requestData.Resolution.ToTimeSpan();
-                        if (!isEquity) istartTime = istartTime.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
-                        return new TradeBar(istartTime, requestData.Symbol, (decimal)i.Open, (decimal)i.High, (decimal)i.Low, (decimal)i.Close, i.PeriodVolume, requestData.Resolution.ToTimeSpan());
-                    case LookupType.REQ_HST_DWM:
-                        var d = (LookupDayWeekMonthEventArgs)e;
-                        if (d.DateTimeStamp == DateTime.MinValue) return null;
-                        var dstartTime = d.DateTimeStamp.Date;
-                        if (!isEquity) dstartTime = dstartTime.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
-                        return new TradeBar(dstartTime, requestData.Symbol, (decimal)d.Open, (decimal)d.High, (decimal)d.Low, (decimal)d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
+                            var tick = new Tick()
+                            {
+                                Time = t.DateTimeStamp.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone),
+                                DataType = MarketDataType.Tick,
+                                Symbol = requestData.Symbol,
+                            };
 
+                            switch (requestData.TickType)
+                            {
+                                case TickType.Trade:
+                                    tick.TickType = TickType.Trade;
+                                    tick.Value = t.Last;
+                                    tick.Quantity = t.LastSize;
+                                    break;
+                                case TickType.Quote:
+                                    tick.TickType = TickType.Quote;
+                                    tick.AskPrice = t.Ask;
+                                    tick.BidPrice = t.Bid;
+                                    break;
+                                default:
+                                    throw new NotImplementedException($"The TickType '{requestData.TickType}' is not supported in the {nameof(GetData)} method. Please implement the necessary logic for handling this TickType.");
+                            }
+
+                            return tick;
+                        }
+                        return null;
+                    case LookupType.REQ_HST_INT:
+                        if (e is LookupIntervalEventArgs i && i.DateTimeStamp != default)
+                        {
+                            var resolutionTimeSpan = requestData.Resolution.ToTimeSpan();
+                            var time = (i.DateTimeStamp - resolutionTimeSpan).ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone);
+                            return new TradeBar(time, requestData.Symbol, i.Open, i.High, i.Low, i.Close, i.PeriodVolume, resolutionTimeSpan);
+                        }
+                        return null;
+                    case LookupType.REQ_HST_DWM:
+                        if (e is LookupDayWeekMonthEventArgs d && d.DateTimeStamp != default)
+                        {
+                            return new TradeBar(d.DateTimeStamp.Date.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone), requestData.Symbol, d.Open, d.High, d.Low, d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
+                        }
+                        return null;
                     // we don't need to handle these other types
                     case LookupType.REQ_SYM_SYM:
                     case LookupType.REQ_SYM_SIC:

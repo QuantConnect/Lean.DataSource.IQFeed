@@ -17,7 +17,9 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using QuantConnect.Securities;
 using System.Collections.Generic;
+using QuantConnect.Configuration;
 
 namespace QuantConnect.Lean.DataSource.IQFeed.Tests
 {
@@ -26,9 +28,16 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
     {
         private IQFeedDataDownloader _downloader;
 
-        [SetUp]
-        public void SetUp()
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
         {
+            if (OS.IsWindows)
+            {
+                // IQConnect is only supported on Windows
+                var connector = new IQConnect(Config.Get("iqfeed-productName"), "1.0");
+                Assert.IsTrue(connector.Launch(), "Failed to launch IQConnect on Windows. Ensure IQFeed is installed and configured properly.");
+            }
+
             _downloader = new IQFeedDataDownloader();
         }
 
@@ -49,6 +58,36 @@ namespace QuantConnect.Lean.DataSource.IQFeed.Tests
             }
 
             IQFeedHistoryProviderTests.AssertHistoricalDataResponse(resolution, downloadResponse);
+        }
+
+        private static IEnumerable<TestCaseData> CanonicalFutureSymbolTestCases
+        {
+            get
+            {
+                var startDateUtc = new DateTime(2025, 03, 03);
+                var endDateUtc = new DateTime(2025, 04, 04);
+
+                var naturalGas = Symbol.Create(Futures.Energy.NaturalGas, SecurityType.Future, Market.NYMEX);
+                yield return new TestCaseData(naturalGas, Resolution.Daily, TickType.Trade, startDateUtc, endDateUtc);
+
+                var nasdaq100EMini = Symbol.Create(Futures.Indices.NASDAQ100EMini, SecurityType.Future, Market.CME);
+                yield return new TestCaseData(nasdaq100EMini, Resolution.Daily, TickType.Trade, startDateUtc, endDateUtc);
+            }
+        }
+
+
+        [TestCaseSource(nameof(CanonicalFutureSymbolTestCases))]
+        public void DownloadCanonicalFutureHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateUtc, DateTime endDateUtc)
+        {
+            var parameters = new DataDownloaderGetParameters(symbol, resolution, startDateUtc, endDateUtc, tickType);
+            var downloadResponse = _downloader.Get(parameters)?.ToList();
+
+            Assert.IsNotNull(downloadResponse);
+            Assert.IsNotEmpty(downloadResponse);
+
+            var uniqueFutureSymbols = downloadResponse.Select(x => x.Symbol).Distinct().ToList();
+
+            Assert.That(uniqueFutureSymbols.Count, Is.GreaterThan(1), $"Expected more than 1 unique future symbol, but got {uniqueFutureSymbols.Count}: {string.Join(", ", uniqueFutureSymbols)}");
         }
     }
 }

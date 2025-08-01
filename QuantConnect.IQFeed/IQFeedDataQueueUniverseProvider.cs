@@ -22,8 +22,11 @@ using System.Globalization;
 using QuantConnect.Interfaces;
 using QuantConnect.Brokerages;
 using QuantConnect.Securities;
+using System.Runtime.CompilerServices;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Transport;
+
+[assembly: InternalsVisibleTo("QuantConnect.Lean.DataSource.IQFeed.Tests")]
 
 namespace QuantConnect.Lean.DataSource.IQFeed
 {
@@ -67,11 +70,26 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         // Prioritized list of exchanges used to find right futures contract
         public static readonly Dictionary<string, string> FuturesExchanges = new Dictionary<string, string>
         {
-            { "CME", Market.Globex },
+            { "CBOT_GBX", Market.CBOT },
+            { "CBOTMINI", Market.CBOT },
+            { "CFE", Market.CFE },
+            { "CME_GBX", Market.Globex },
+            { "CMEMINI", Market.CME },
+            { "COMEX_GBX", Market.COMEX },
+            { "EUREX", Market.EUREX },
+            { "ICEEA", Market.ICE }, // ICE Futures Europe - included in both Commodities/Financials packages
+            { "ICEEC", Market.ICE }, // ICE Futures Europe - Commodities
+            { "ICEEF", Market.ICE }, // ICE Futures Europe - Financials
+            { "ICEENDEX", Market.ICE }, // ICE Endex
+            { "ICEFANG", Market.ICE }, // ICE FANG Futures
+            { "ICEFC", Market.ICE }, // ICE Futures Canada
+            { "ICEFU", Market.ICE }, // ICE Futures US
+            { "NYMEX_GBX", Market.NYMEX }, // Nymex Globex Contracts
+            { "NYMEXMINI", Market.NYMEX }, // NYMEX Mini Contracts
+            { "SGX", Market.SGX }, // Singapore International Monetary Exchange
+            { "CME", Market.CME },
             { "NYMEX", Market.NYMEX },
             { "CBOT", Market.CBOT },
-            { "ICEFU", Market.ICE },
-            { "CFE", Market.CFE }
         };
 
         // futures fundamental data resolver
@@ -96,8 +114,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <returns>IQFeed ticker</returns>
         public string GetBrokerageSymbol(Symbol symbol)
         {
-            string leanSymbol;
-            return _symbols.TryGetValue(symbol, out leanSymbol) ? leanSymbol : string.Empty;
+            return _symbols.TryGetValue(symbol, out var brokerageSymbol) ? brokerageSymbol : string.Empty;
         }
 
         /// <summary>
@@ -269,7 +286,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             if (mapExists)
             {
                 Log.Trace($"{nameof(IQFeedDataQueueUniverseProvider)}.{nameof(LoadSymbols)}: Loading IQFeed futures symbol map file...");
-                _iqFeedNameMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText(iqfeedNameMapFullName));
+                _iqFeedNameMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText(iqfeedNameMapFullName)) ?? [];
             }
 
             if (!universeExists)
@@ -383,38 +400,64 @@ namespace QuantConnect.Lean.DataSource.IQFeed
 
                     case "FUTURE":
 
-                        // we are not interested in designated continuous contracts
-                        if (columns[columnSymbol].EndsWith("#") || columns[columnSymbol].EndsWith("#C") || columns[columnSymbol].EndsWith("$$"))
-                            continue;
-
-                        var futuresTicker = columns[columnSymbol].TrimStart(new[] { '@' });
-
-                        var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
-                        var underlyingString = parsed.Underlying;
-
-                        if (_iqFeedNameMap.ContainsKey(underlyingString))
-                            underlyingString = _iqFeedNameMap[underlyingString];
-                        else
+                        // Exclude non-standard contracts such as:
+                        // - Continuous contracts (e.g., @BO# or @BO#C)
+                        // - Synthetic or spot instruments (e.g., CVUY$$)
+                        // These are not standard, tradable futures and are not supported by Lean
+                        if (columns[columnSymbol].EndsWith('#')
+                            || columns[columnSymbol].EndsWith("#C", StringComparison.InvariantCultureIgnoreCase)
+                            || columns[columnSymbol].EndsWith("$$", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (!mapExists)
+                            continue;
+                        }
+
+                        var normalizedFutureBrokerageSymbol = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
+
+                        var underlyingBrokerageTicker = SymbolRepresentation.ParseFutureTicker(normalizedFutureBrokerageSymbol).Underlying;
+
+                        if (_iqFeedNameMap.TryGetValue(underlyingBrokerageTicker, out var underlyingLeanTicker))
+                        {
+                            normalizedFutureBrokerageSymbol = normalizedFutureBrokerageSymbol.Replace(underlyingBrokerageTicker, underlyingLeanTicker);
+                            underlyingBrokerageTicker = underlyingLeanTicker;
+                        }
+                        else if (!mapExists && !_iqFeedNameMap.ContainsKey(underlyingBrokerageTicker))
+                        {
+                            // if map is not created yet, we request this information from IQFeed
+                            var exchangeSymbol = _symbolFundamentalData.Request(columns[columnSymbol]).Item2;
+                            if (!string.IsNullOrEmpty(exchangeSymbol))
                             {
-                                if (!_iqFeedNameMap.ContainsKey(underlyingString))
-                                {
-                                    // if map is not created yet, we request this information from IQFeed
-                                    var exchangeSymbol = _symbolFundamentalData.Request(columns[columnSymbol]).Item2;
-                                    if (!string.IsNullOrEmpty(exchangeSymbol))
-                                    {
-                                        _iqFeedNameMap[underlyingString] = exchangeSymbol;
-                                        underlyingString = exchangeSymbol;
-                                    }
-                                }
+                                _iqFeedNameMap[underlyingBrokerageTicker] = exchangeSymbol;
+                                underlyingBrokerageTicker = exchangeSymbol;
                             }
                         }
 
-                        var market = GetFutureMarket(underlyingString, columns[columnExchange]);
-                        canonicalSymbol = Symbol.Create(underlyingString, SecurityType.Future, market);
+                        var market = GetFutureMarket(underlyingBrokerageTicker, columns[columnListedMarket]);
 
-                        if (!symbolCache.ContainsKey(canonicalSymbol))
+                        if (TryParseFutureSymbol(normalizedFutureBrokerageSymbol, out var leanFutureSymbol))
+                        {
+                            var placeholderSymbolData = new SymbolData
+                            {
+                                Symbol = leanFutureSymbol,
+                                SecurityCurrency = Currencies.USD,
+                                SecurityExchange = market,
+                                StartPosition = prevPosition,
+                                EndPosition = currentPosition,
+                                Ticker = columns[columnSymbol]
+                            };
+
+                            if (symbolCache.TryAdd(leanFutureSymbol, placeholderSymbolData))
+                            {
+                                break;
+                            }
+                        }
+
+                        canonicalSymbol = Symbol.Create(underlyingBrokerageTicker, SecurityType.Future, market);
+
+                        if (symbolCache.TryGetValue(canonicalSymbol, out var symbolData))
+                        {
+                            symbolData.EndPosition = currentPosition;
+                        }
+                        else
                         {
                             var placeholderSymbolData = new SymbolData
                             {
@@ -422,14 +465,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                                 SecurityCurrency = Currencies.USD,
                                 SecurityExchange = market,
                                 StartPosition = prevPosition,
-                                EndPosition = currentPosition
+                                EndPosition = currentPosition,
+                                Ticker = columns[columnSymbol]
                             };
 
                             symbolCache.Add(canonicalSymbol, placeholderSymbolData);
-                        }
-                        else
-                        {
-                            symbolCache[canonicalSymbol].EndPosition = currentPosition;
                         }
 
                         break;
@@ -517,7 +557,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             continue;
                         }
 
-                        var futuresTicker = columns[columnSymbol].TrimStart(new[] { '@' });
+                        var futuresTicker = NormalizeFuturesTicker(columns[columnListedMarket], columns[columnSymbol]);
 
                         var parsed = SymbolRepresentation.ParseFutureTicker(futuresTicker);
                         var underlyingString = parsed.Underlying;
@@ -530,7 +570,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                             continue;
                         }
 
-                        var market = GetFutureMarket(underlyingString, columns[columnExchange]);
+                        var market = GetFutureMarket(underlyingString, columns[columnListedMarket]);
                         // Futures contracts have different idiosyncratic expiration dates that IQFeed symbol universe file doesn't contain
                         // We request IQFeed explicitly for the exact expiration data of each contract
 
@@ -695,18 +735,51 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             }
         }
 
-        public IEnumerable<string> GetBrokerageContractSymbol(Symbol subscribeSymbol)
-        {
-            return _symbols.Where(kpv => kpv.Key.SecurityType == SecurityType.Future && kpv.Key.ID.Symbol == subscribeSymbol.ID.Symbol)
-                .Select(kpv => kpv.Value);
-        }
-
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         /// </summary>
         public void Dispose()
         {
             _dataCacheProvider.DisposeSafely();
+        }
+
+        /// <summary>
+        /// Normalizes the futures ticker by removing exchange-specific electronic contract prefixes.
+        /// </summary>
+        /// <param name="exchange">The exchange code (e.g., "NYMEX", "COMEX", "CBOT", "CME").</param>
+        /// <param name="symbol">The raw symbol from the data feed.</param>
+        /// <returns>The normalized symbol with the exchange-specific prefix removed.</returns>
+        /// <remarks>
+        /// NYMEX, COMEX, NYMEXMINI, and NYMEX_GBX adopted the 'Q' prefix, which is removed explicitly.
+        /// Exchanges such as CBOT, CBOT_GBX, CBOTMINI, CME, CMEMINI, and COMEX_GBX typically use the '@' 
+        /// prefix to denote electronic contracts. This '@' is removed by default in the fallback case.
+        /// </remarks>
+        internal static string NormalizeFuturesTicker(string exchange, string symbol)
+        {
+            switch (exchange)
+            {
+                case "COMEX":
+                case "NYMEX":
+                case "NYMEXMINI":
+                case "NYMEX_GBX":
+                    return symbol[1..];
+                default:
+                    return symbol[0] == '@' ? symbol[1..] : symbol;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to parse the specified future ticker string into a Lean <see cref="Symbol"/>.
+        /// </summary>
+        /// <param name="futureTicker">The future ticker string to parse.</param>
+        /// <param name="leanSymbol">
+        /// When this method returns, contains the parsed <see cref="Symbol"/> if the parsing succeeded; otherwise, <c>null</c>.
+        /// </param>
+        /// <returns><c>true</c> if the parsing succeeded; otherwise, <c>false</c>.</returns>
+        private static bool TryParseFutureSymbol(string futureTicker, out Symbol leanSymbol)
+        {
+            leanSymbol = SymbolRepresentation.ParseFutureSymbol(futureTicker);
+            return leanSymbol != null;
         }
     }
 }
