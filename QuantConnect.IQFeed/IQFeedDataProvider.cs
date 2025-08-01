@@ -22,14 +22,13 @@ using Newtonsoft.Json;
 using QuantConnect.Api;
 using QuantConnect.Util;
 using QuantConnect.Data;
-using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using QuantConnect.Packets;
 using QuantConnect.Logging;
+using QuantConnect.Securities;
 using QuantConnect.Interfaces;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
-using Timer = System.Timers.Timer;
 using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
@@ -47,6 +46,11 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private readonly Dictionary<Symbol, Symbol> _underlyings;
         private readonly object _sync = new object();
         private IQFeedDataQueueUniverseProvider _symbolUniverse;
+
+        /// <summary>
+        /// Represents the time zone used by IQFeed, which returns time in the New York (EST) Time Zone with daylight savings time.
+        /// </summary>
+        public readonly static DateTimeZone TimeZoneIQFeed = TimeZones.NewYork;
 
         //Socket connections:
         private AdminPort _adminPort;
@@ -233,7 +237,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             var subscriptions = new List<IEnumerable<Slice>>();
             foreach (var request in requests)
             {
-                var history = _historyPort.ProcessHistoryRequests(request);
+                var history = _historyPort.ProcessHistoryRequests(request, sliceTimeZone);
 
                 if (history == null)
                 {
@@ -556,66 +560,53 @@ namespace QuantConnect.Lean.DataSource.IQFeed
     /// </summary>
     public class Level1Port : IQLevel1Client
     {
-        private int count;
-        private DateTime start;
-        private DateTime _feedTime;
-        private Stopwatch _stopwatch = new Stopwatch();
-        private readonly Timer _timer;
         private readonly ConcurrentDictionary<string, double> _prices;
         private readonly ConcurrentDictionary<string, int> _openInterests;
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
         private readonly IDataAggregator _aggregator;
-        private int _dataQueueCount;
 
-        public DateTime FeedTime
-        {
-            get
-            {
-                if (_feedTime == new DateTime()) return DateTime.Now;
-                return _feedTime.AddMilliseconds(_stopwatch.ElapsedMilliseconds);
-            }
-            set
-            {
-                _feedTime = value;
-                _stopwatch = Stopwatch.StartNew();
-            }
-        }
+        /// <summary>
+        /// A thread-safe dictionary that maps a <see cref="Symbol"/> to a <see cref="DateTimeZone"/>.
+        /// </summary>
+        /// <remarks>
+        /// This dictionary is used to store the time zone information for each symbol in a concurrent environment,
+        /// ensuring thread safety when accessing or modifying the time zone data.
+        /// </remarks>
+        private readonly ConcurrentDictionary<Symbol, DateTimeZone> _exchangeTimeZoneByLeanSymbol = new();
 
         public Level1Port(IDataAggregator aggregator, IQFeedDataQueueUniverseProvider symbolUniverse)
             : base(IQFeedDefault.BufferSize)
         {
-            start = DateTime.Now;
             _prices = new ConcurrentDictionary<string, double>();
             _openInterests = new ConcurrentDictionary<string, int>();
 
             _aggregator = aggregator;
             _symbolUniverse = symbolUniverse;
             Level1SummaryUpdateEvent += OnLevel1SummaryUpdateEvent;
-            Level1TimerEvent += OnLevel1TimerEvent;
             Level1ServerDisconnectedEvent += OnLevel1ServerDisconnected;
             Level1ServerReconnectFailed += OnLevel1ServerReconnectFailed;
             Level1UnknownEvent += OnLevel1UnknownEvent;
             Level1FundamentalEvent += OnLevel1FundamentalEvent;
+        }
 
-            _timer = new Timer(1000);
-            _timer.Enabled = false;
-            _timer.AutoReset = true;
-            _timer.Elapsed += (sender, args) =>
+        /// <summary>
+        /// Returns a timestamp for a tick converted to the exchange time zone
+        /// </summary>
+        private DateTime GetRealTimeTickTime(Symbol symbol)
+        {
+            var time = DateTime.UtcNow;
+            var exchangeTimeZone = default(DateTimeZone);
+            lock (_exchangeTimeZoneByLeanSymbol)
             {
-                var ticksPerSecond = count / (DateTime.Now - start).TotalSeconds;
-                int dataQueueCount = Interlocked.Exchange(ref _dataQueueCount, 0);
-                if (ticksPerSecond > 1000 || dataQueueCount > 31)
+                if (!_exchangeTimeZoneByLeanSymbol.TryGetValue(symbol, out exchangeTimeZone))
                 {
-                    Log.Trace($"IQFeed.OnSecond(): Ticks/sec: {ticksPerSecond.ToStringInvariant("0000.00")} " +
-                        $"Engine.Ticks.Count: {dataQueueCount} CPU%: {OS.CpuUsage.ToStringInvariant("0.0") + "%"}"
-                    );
+                    // read the exchange time zone from market-hours-database
+                    exchangeTimeZone = MarketHoursDatabase.FromDataFolder().GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType).TimeZone;
+                    _exchangeTimeZoneByLeanSymbol[symbol] = exchangeTimeZone;
                 }
+            }
 
-                count = 0;
-                start = DateTime.Now;
-            };
-
-            _timer.Enabled = true;
+            return time.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, exchangeTimeZone);
         }
 
         private Symbol GetLeanSymbol(string ticker)
@@ -635,7 +626,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 _prices.TryGetValue(e.Symbol, out referencePrice);
 
                 var symbol = GetLeanSymbol(e.Symbol);
-                var split = new Data.Market.Split(symbol, FeedTime, (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
+                var split = new Data.Market.Split(symbol, GetRealTimeTickTime(symbol), (decimal)referencePrice, (decimal)e.SplitFactor1, SplitType.SplitOccurred);
                 Emit(split);
             }
         }
@@ -657,29 +648,20 @@ namespace QuantConnect.Lean.DataSource.IQFeed
              && e.TypeOfUpdate != Level1SummaryUpdateEventArgs.UpdateType.Bid
              && e.TypeOfUpdate != Level1SummaryUpdateEventArgs.UpdateType.Ask) return;
 
-            count++;
-            var time = FeedTime;
             var last = (decimal)(e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.ExtendedTrade ? e.ExtendedTradingLast : e.Last);
 
             var symbol = GetLeanSymbol(e.Symbol);
+            var time = GetRealTimeTickTime(symbol);
 
             TickType tradeType;
 
             switch (symbol.ID.SecurityType)
             {
-                // the feed time is in NYC/EDT, convert it into EST
                 case SecurityType.Forex:
-
-                    time = FeedTime.ConvertTo(TimeZones.NewYork, TimeZones.EasternStandard);
                     // TypeOfUpdate always equal to UpdateType.Trade for FXCM, but the message contains B/A and last data
                     tradeType = TickType.Quote;
-
                     break;
-
-                // for all other asset classes we leave it as is (NYC/EDT)
                 default:
-
-                    time = FeedTime;
                     tradeType = e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.Bid ||
                                 e.TypeOfUpdate == Level1SummaryUpdateEventArgs.UpdateType.Ask ?
                                 TickType.Quote :
@@ -687,7 +669,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     break;
             }
 
-            var tick = new Tick(time, symbol, last, (decimal)e.Bid, (decimal)e.Ask)
+            var tick = new Tick(GetRealTimeTickTime(symbol), symbol, last, (decimal)e.Bid, (decimal)e.Ask)
             {
                 AskSize = e.AskSize,
                 BidSize = e.BidSize,
@@ -713,19 +695,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private void Emit(BaseData tick)
         {
             _aggregator.Update(tick);
-            Interlocked.Increment(ref _dataQueueCount);
-        }
-
-        /// <summary>
-        /// Set the interal clock time.
-        /// </summary>
-        private void OnLevel1TimerEvent(object sender, Level1TimerEventArgs e)
-        {
-            //If there was a bad tick and the time didn't set right, skip setting it here and just use our millisecond timer to set the time from last time it was set.
-            if (e.DateTimeStamp != DateTime.MinValue)
-            {
-                FeedTime = e.DateTimeStamp;
-            }
         }
 
         /// <summary>
@@ -760,11 +729,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         private readonly ConcurrentDictionary<string, HistoryRequest> _requestDataByRequestId = [];
         private ConcurrentDictionary<string, List<BaseData>> _currentRequest;
         private readonly IQFeedDataQueueUniverseProvider _symbolUniverse;
-
-        /// <summary>
-        /// Represents the time zone used by IQFeed, which returns time in the New York (EST) Time Zone with daylight savings time.
-        /// </summary>
-        private readonly static DateTimeZone TimeZoneIQFeed = TimeZones.NewYork;
 
         /// <summary>
         /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
@@ -802,9 +766,14 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         }
 
         /// <summary>
-        /// Populate request data
+        ///  Processes the specified historical data request and generates a sequence of <see cref="Slice"/> instances.
         /// </summary>
-        public IEnumerable<Slice>? ProcessHistoryRequests(HistoryRequest request)
+        /// <param name="request">The historical data requests</param>
+        /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
+        /// <returns> An enumerable sequence of <see cref="Slice"/> objects representing the historical data for the request,
+        /// or <c>null</c> if no data could be retrieved or processed.
+        /// </returns>
+        public IEnumerable<Slice>? ProcessHistoryRequests(HistoryRequest request, DateTimeZone sliceTimeZone)
         {
             // skipping universe and canonical symbols
             if (!CanHandle(request.Symbol) ||
@@ -843,8 +812,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             _inProgress = true;
 
             var ticker = _symbolUniverse.GetBrokerageSymbol(request.Symbol);
-            var start = request.StartTimeUtc.ConvertFromUtc(TimeZoneIQFeed);
-            DateTime? end = request.EndTimeUtc.ConvertFromUtc(TimeZoneIQFeed);
+            var start = request.StartTimeUtc.ConvertFromUtc(IQFeedDataProvider.TimeZoneIQFeed);
+            DateTime? end = request.EndTimeUtc.ConvertFromUtc(IQFeedDataProvider.TimeZoneIQFeed);
             // if we're within a minute of now, don't set the end time
             if (request.EndTimeUtc >= DateTime.UtcNow.AddMinutes(-1))
             {
@@ -882,10 +851,10 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 continue;
             }
 
-            return GetSlice(request.DataTimeZone);
+            return GetSlice(request.ExchangeHours.TimeZone, sliceTimeZone);
         }
 
-        private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz)
+        private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz, DateTimeZone sliceTimeZone)
         {
             // After all data arrive, we pass it to the algorithm through memory and write to a file
             foreach (var key in _currentRequest.Keys)
@@ -894,10 +863,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 {
                     foreach (var tradeBar in tradeBars)
                     {
-                        tradeBar.Time = tradeBar.Time.ConvertTo(TimeZoneIQFeed, exchangeTz);
-                        tradeBar.EndTime = tradeBar.EndTime.ConvertTo(TimeZoneIQFeed, exchangeTz);
                         // Returns IEnumerable<Slice> object
-                        yield return new Slice(tradeBar.EndTime, new[] { tradeBar }, tradeBar.EndTime.ConvertToUtc(exchangeTz));
+                        yield return new Slice(tradeBar.EndTime.ConvertTo(exchangeTz, sliceTimeZone), new[] { tradeBar }, tradeBar.EndTime.ConvertToUtc(exchangeTz));
                     }
                 }
             }
@@ -993,7 +960,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         {
                             var tick = new Tick()
                             {
-                                Time = t.DateTimeStamp,
+                                Time = t.DateTimeStamp.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone),
                                 DataType = MarketDataType.Tick,
                                 Symbol = requestData.Symbol,
                             };
@@ -1021,13 +988,14 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                         if (e is LookupIntervalEventArgs i && i.DateTimeStamp != default)
                         {
                             var resolutionTimeSpan = requestData.Resolution.ToTimeSpan();
-                            return new TradeBar(i.DateTimeStamp - resolutionTimeSpan, requestData.Symbol, i.Open, i.High, i.Low, i.Close, i.PeriodVolume, resolutionTimeSpan);
+                            var time = (i.DateTimeStamp - resolutionTimeSpan).ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone);
+                            return new TradeBar(time, requestData.Symbol, i.Open, i.High, i.Low, i.Close, i.PeriodVolume, resolutionTimeSpan);
                         }
                         return null;
                     case LookupType.REQ_HST_DWM:
                         if (e is LookupDayWeekMonthEventArgs d && d.DateTimeStamp != default)
                         {
-                            return new TradeBar(d.DateTimeStamp.Date, requestData.Symbol, d.Open, d.High, d.Low, d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
+                            return new TradeBar(d.DateTimeStamp.Date.ConvertTo(IQFeedDataProvider.TimeZoneIQFeed, requestData.ExchangeHours.TimeZone), requestData.Symbol, d.Open, d.High, d.Low, d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
                         }
                         return null;
                     // we don't need to handle these other types
