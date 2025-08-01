@@ -764,7 +764,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
         /// <summary>
         /// Represents the time zone used by IQFeed, which returns time in the New York (EST) Time Zone with daylight savings time.
         /// </summary>
-        private static DateTimeZone TimeZoneIQFeed = TimeZones.NewYork;
+        private readonly static DateTimeZone TimeZoneIQFeed = TimeZones.NewYork;
 
         /// <summary>
         /// Indicates whether the warning for invalid <see cref="SecurityType"/> has been fired.
@@ -845,7 +845,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
             var ticker = _symbolUniverse.GetBrokerageSymbol(request.Symbol);
             var start = request.StartTimeUtc.ConvertFromUtc(TimeZoneIQFeed);
             DateTime? end = request.EndTimeUtc.ConvertFromUtc(TimeZoneIQFeed);
-            var exchangeTz = request.ExchangeHours.TimeZone;
             // if we're within a minute of now, don't set the end time
             if (request.EndTimeUtc >= DateTime.UtcNow.AddMinutes(-1))
             {
@@ -883,7 +882,7 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 continue;
             }
 
-            return GetSlice(exchangeTz);
+            return GetSlice(request.DataTimeZone);
         }
 
         private IEnumerable<Slice>? GetSlice(DateTimeZone exchangeTz)
@@ -895,6 +894,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 {
                     foreach (var tradeBar in tradeBars)
                     {
+                        tradeBar.Time = tradeBar.Time.ConvertTo(TimeZoneIQFeed, exchangeTz);
+                        tradeBar.EndTime = tradeBar.EndTime.ConvertTo(TimeZoneIQFeed, exchangeTz);
                         // Returns IEnumerable<Slice> object
                         yield return new Slice(tradeBar.EndTime, new[] { tradeBar }, tradeBar.EndTime.ConvertToUtc(exchangeTz));
                     }
@@ -990,49 +991,43 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                     case LookupType.REQ_HST_TCK:
                         if (e is LookupTickEventArgs t)
                         {
-                            var time = ConvertDateTimeToSpecificDateTimeZoneBySecurityType(requestData.Symbol.SecurityType, t.DateTimeStamp, requestData.DataTimeZone);
+                            var tick = new Tick()
+                            {
+                                Time = t.DateTimeStamp,
+                                DataType = MarketDataType.Tick,
+                                Symbol = requestData.Symbol,
+                            };
+
                             switch (requestData.TickType)
                             {
                                 case TickType.Trade:
-                                    return new Tick()
-                                    {
-                                        Time = time,
-                                        Value = (decimal)t.Last,
-                                        DataType = MarketDataType.Tick,
-                                        Symbol = requestData.Symbol,
-                                        TickType = TickType.Trade,
-                                        Quantity = t.LastSize,
-                                    };
+                                    tick.TickType = TickType.Trade;
+                                    tick.Value = t.Last;
+                                    tick.Quantity = t.LastSize;
+                                    break;
                                 case TickType.Quote:
-                                    return new Tick()
-                                    {
-                                        Time = time,
-                                        DataType = MarketDataType.Tick,
-                                        Symbol = requestData.Symbol,
-                                        TickType = TickType.Quote,
-                                        AskPrice = (decimal)t.Ask,
-                                        //AskSize = askSize,
-                                        BidPrice = (decimal)t.Bid,
-                                        //BidSize = bidSize,
-                                    };
+                                    tick.TickType = TickType.Quote;
+                                    tick.AskPrice = t.Ask;
+                                    tick.BidPrice = t.Bid;
+                                    break;
                                 default:
                                     throw new NotImplementedException($"The TickType '{requestData.TickType}' is not supported in the {nameof(GetData)} method. Please implement the necessary logic for handling this TickType.");
                             }
+
+                            return tick;
                         }
                         return null;
                     case LookupType.REQ_HST_INT:
                         if (e is LookupIntervalEventArgs i && i.DateTimeStamp != default)
                         {
                             var resolutionTimeSpan = requestData.Resolution.ToTimeSpan();
-                            var startTime = ConvertDateTimeToSpecificDateTimeZoneBySecurityType(requestData.Symbol.SecurityType, i.DateTimeStamp - resolutionTimeSpan, requestData.DataTimeZone);
-                            return new TradeBar(startTime, requestData.Symbol, i.Open, i.High, i.Low, i.Close, i.PeriodVolume, resolutionTimeSpan);
+                            return new TradeBar(i.DateTimeStamp - resolutionTimeSpan, requestData.Symbol, i.Open, i.High, i.Low, i.Close, i.PeriodVolume, resolutionTimeSpan);
                         }
                         return null;
                     case LookupType.REQ_HST_DWM:
                         if (e is LookupDayWeekMonthEventArgs d && d.DateTimeStamp != default)
                         {
-                            var startTime = ConvertDateTimeToSpecificDateTimeZoneBySecurityType(requestData.Symbol.SecurityType, d.DateTimeStamp.Date, requestData.DataTimeZone);
-                            return new TradeBar(startTime, requestData.Symbol, (decimal)d.Open, (decimal)d.High, (decimal)d.Low, (decimal)d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
+                            return new TradeBar(d.DateTimeStamp.Date, requestData.Symbol, d.Open, d.High, d.Low, d.Close, d.PeriodVolume, requestData.Resolution.ToTimeSpan());
                         }
                         return null;
                     // we don't need to handle these other types
@@ -1054,26 +1049,6 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 Log.Error(err);
                 return null;
             }
-        }
-
-        /// <summary>
-        /// Converts the specified <paramref name="dateTime"/> to the given <paramref name="dateTimeZone"/>
-        /// based on the provided <paramref name="securityType"/>. If the security type is not <see cref="SecurityType.Equity"/>
-        /// and the destination time zone is different from the IQFeed time zone, the conversion is performed.
-        /// </summary>
-        /// <param name="securityType">The type of the security (e.g., Equity, Future, Option).</param>
-        /// <param name="dateTime">The original <see cref="DateTime"/> value to convert.</param>
-        /// <param name="dateTimeZone">The target <see cref="DateTimeZone"/> for conversion.</param>
-        /// <returns>
-        /// The converted <see cref="DateTime"/> if conditions are met; otherwise, returns the original <paramref name="dateTime"/>.
-        /// </returns>
-        private static DateTime ConvertDateTimeToSpecificDateTimeZoneBySecurityType(SecurityType securityType, DateTime dateTime, DateTimeZone dateTimeZone)
-        {
-            if (securityType != SecurityType.Equity && TimeZoneIQFeed != dateTimeZone)
-            {
-                return dateTime.ConvertTo(TimeZoneIQFeed, dateTimeZone);
-            }
-            return dateTime;
         }
 
         private static PeriodType GetPeriodType(Resolution resolution)
