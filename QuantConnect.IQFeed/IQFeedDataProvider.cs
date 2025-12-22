@@ -15,7 +15,6 @@
 */
 
 using NodaTime;
-using RestSharp;
 using System.Net;
 using System.Text;
 using Newtonsoft.Json;
@@ -476,8 +475,10 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 {
                     information.Add("organizationId", organizationId);
                 }
-                var request = new RestRequest("modules/license/read", Method.POST) { RequestFormat = DataFormat.Json };
-                request.AddParameter("application/json", JsonConvert.SerializeObject(information), ParameterType.RequestBody);
+
+                // Create HTTP request
+                using var request = ApiUtils.CreateJsonPostRequest("modules/license/read", information);
+
                 api.TryRequest(request, out ModulesReadLicenseRead result);
                 if (!result.Success)
                 {
