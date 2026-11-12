@@ -171,15 +171,8 @@ namespace QuantConnect.Lean.DataSource.IQFeed
                 blockingCollection.CompleteAdding();
             });
 
-            var historyResponses = blockingCollection.GetConsumingEnumerable();
-
-            // Validate if the collection contains at least one successful response from history.
-            if (!historyResponses.Any())
-            {
-                return null;
-            }
-
-            return historyResponses;
+            // Null when no contract returned any history, otherwise every history point, the first one included.
+            return blockingCollection.GetConsumingEnumerableOrNull();
         }
 
         /// <summary>
